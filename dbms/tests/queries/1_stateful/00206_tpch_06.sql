@@ -1,5 +1,5 @@
 -- 1) rewritten date -> toDate
--- 2) toDecimal parsing
+-- 2) toDecimal
 select
 	sum(l_extendedprice * l_discount) as revenue
 from

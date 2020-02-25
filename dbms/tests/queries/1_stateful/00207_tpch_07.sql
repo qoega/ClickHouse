@@ -1,6 +1,6 @@
 -- 1) rewritten date -> toDate
 -- 2) explicit aliases
--- 3) FixedString <-> toString in where
+-- 3) FixedString <-> toString
 -- 4) OR moved out of join query to separate select
 -- 5) changed tables order in from expression
 select

@@ -1,6 +1,6 @@
 -- 1) rewritten date -> toDate
 -- 2) explicit aliases
--- 3) FixedString <-> toString in where
+-- 3) FixedString <-> toString
 -- 4) changed tables order in from expression
 select
 	o_year,

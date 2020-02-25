@@ -1,6 +1,6 @@
 -- 1) rewrite not exists into join + where is null
 -- 2) enable join_use_nulls
--- 3) toDecimal for 0.00 literal
+-- 3) toDecimal
 -- 4) explicit aliases
 
 SET join_use_nulls = 1;

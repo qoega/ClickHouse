@@ -1,8 +1,8 @@
 -- 1) rewritten date -> toDate
 -- 2) explicit aliases
 -- 3) correlated subquery rewritten to explicit left join with aggregation
--- 4) FixedString <-> toString in where
--- 5) like moved out of join query
+-- 4) FixedString <-> toString
+-- 5) like moved out from join
 
 select
 	s_acctbal,

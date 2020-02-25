@@ -1,6 +1,6 @@
 -- 1) explicit aliases
--- 2) FixedString <-> toString in where
--- 3) toDecimal for 0.00 literal
+-- 2) FixedString <-> toString
+-- 3) toDecimal
 -- 4) join and group by with having splitted in different select clauses
 
 select

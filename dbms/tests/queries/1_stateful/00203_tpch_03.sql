@@ -1,7 +1,7 @@
 -- 1) rewritten date -> toDate
 -- 2) explicit aliases
--- 3) FixedString <-> toString in where
--- 4) like moved out of join query
+-- 3) FixedString <-> toString
+-- 4) like moved out from join
 -- 5) changed tables order in from expression
 
 select
