@@ -99,6 +99,7 @@ SRCS(
     Merges/ReplacingSortedTransform.h
     Merges/SummingSortedTransform.h
     Merges/VersionedCollapsingTransform.h
+    OffsetTransform.cpp
     Pipe.cpp
     Port.cpp
     QueryPipeline.cpp
