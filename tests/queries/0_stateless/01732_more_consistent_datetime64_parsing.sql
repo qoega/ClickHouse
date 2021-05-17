@@ -8,4 +8,4 @@ SELECT * FROM t ORDER BY i;
 SELECT toDateTime64(1111111111.222, 3, 'Europe/Moscow');
 SELECT toDateTime64('1111111111.222', 3, 'Europe/Moscow');
 SELECT toDateTime64('1111111111222', 3, 'Europe/Moscow');
-SELECT ignore(toDateTime64(1111111111222, 3, 'Europe/Moscow')); -- This gives somewhat correct but unexpected result
+SELECT ignore(toDateTime64(1111111111222, 3)); -- This gives somewhat correct but unexpected result

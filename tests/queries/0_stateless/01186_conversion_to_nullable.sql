@@ -5,7 +5,7 @@ select toDate(x) from values('x Nullable(String)', '2020-12-24', NULL, '0000-00-
 select toDateTime(x, 'Europe/Moscow') from values('x Nullable(String)', '2020-12-24 01:02:03', NULL, '0000-00-00 00:00:00', '');
 select toDateTime64(x, 2, 'Europe/Moscow') from values('x Nullable(String)', '2020-12-24 01:02:03', NULL, '0000-00-00 00:00:00', '');
 select materialize(toUnixTimestamp(x)) = materialize(toUnixTimestamp(toDateTime(x))) from values ('x Nullable(String)', '2000-01-01 13:12:12');
-select toUnixTimestamp(x from values ('x Nullable(String)', NULL, '');
+select toUnixTimestamp(x) from values ('x Nullable(String)', NULL, '');
 
 select toDecimal32(x, 2) from values ('x Nullable(String)', '42', NULL, '3.14159');
 select toDecimal64(x, 8) from values ('x Nullable(String)', '42', NULL, '3.14159');
