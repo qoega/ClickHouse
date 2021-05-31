@@ -14,7 +14,7 @@ then
     tar xJf gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz -C build/cmake/toolchain/linux-aarch64 --strip-components=1
 fi
 
-if [ "1" == "${IS_CROSS_ARM:0}" ]
+if [ "1" == "${IS_CROSS_FREEBSD:0}" ]
 then
     mkdir -p build/cmake/toolchain/freebsd-x86_64
     tar xJf freebsd-11.3-toolchain.tar.xz -C build/cmake/toolchain/freebsd-x86_64 --strip-components=1
