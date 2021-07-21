@@ -22,9 +22,16 @@ endif()
 
 set (USE_CASSANDRA 1)
 set (CASSANDRA_INCLUDE_DIR
+        "${LIBUV_INCLUDE_DIR}"
+        "${SPARSEHASH_INCLUDE_DIR}"
+        "${ClickHouse_SOURCE_DIR}/contrib/cassandra/src"
+        "${ClickHouse_SOURCE_DIR}/cassandra/src/third_party/http-parser/"
         "${ClickHouse_SOURCE_DIR}/contrib/cassandra/include/")
 if (MAKE_STATIC_LIBRARIES)
-    set (CASSANDRA_LIBRARY cassandra_static)
+    set (MINIZIP_LIBRARY minizip)
+    set (HDR_HISTOGRAM_LIBRARY hdr_histogram)
+    set (HTTP_PARSER_LIBRARY http_parser)
+    set (CASSANDRA_LIBRARY cassandra_a)
 else()
     set (CASSANDRA_LIBRARY cassandra)
 endif()

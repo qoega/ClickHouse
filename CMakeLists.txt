@@ -507,7 +507,7 @@ include (cmake/find/zlib.cmake)
 include (cmake/find/zstd.cmake)
 include (cmake/find/ltdl.cmake) # for odbc
 # openssl, zlib before poco
-include (cmake/find/sparsehash.cmake)
+include (cmake/find/sparsehash.cmake) # for cassandra
 include (cmake/find/re2.cmake)
 include (cmake/find/krb5.cmake)
 include (cmake/find/libgsasl.cmake)

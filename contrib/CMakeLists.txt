@@ -285,7 +285,7 @@ if (USE_CASSANDRA)
     set (CMAKE_CXX_STANDARD_bak ${CMAKE_CXX_STANDARD})
     set (CMAKE_CXX_STANDARD 17)
 
-    add_subdirectory (cassandra)
+    add_subdirectory (cassandra-cmake)
 
     set (CMAKE_CXX_STANDARD ${CMAKE_CXX_STANDARD_bak})
     unset (CMAKE_CXX_STANDARD_bak)

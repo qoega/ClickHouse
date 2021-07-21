@@ -439,7 +439,8 @@ if (USE_SQLITE)
 endif()
 
 if (USE_CASSANDRA)
-    dbms_target_link_libraries(PUBLIC ${CASSANDRA_LIBRARY})
+    dbms_target_link_libraries(PUBLIC curl)
+    dbms_target_link_libraries(PRIVATE ssl ${MINIZIP_LIBRARY} ${HTTP_PARSER_LIBRARY} ${HDR_HISTOGRAM_LIBRARY} ${CASSANDRA_LIBRARY})
     dbms_target_include_directories (SYSTEM BEFORE PUBLIC ${CASS_INCLUDE_DIR})
 endif()
 
