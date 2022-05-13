@@ -82,15 +82,15 @@ bool ExecutionThreadContext::executeTask()
     {
         UInt64 elapsed_microseconds =  execution_time_watch->elapsedMicroseconds();
         node->processor->elapsed_us += elapsed_microseconds;
-        span.addAttribute("execution_time_ns", elapsed_microseconds);
-        span.addAttribute("thread_number", thread_number);
+        span.addAttribute("execution_time_ms", elapsed_microseconds);
     }
 
 #ifndef NDEBUG
     execution_time_ns += execution_time_watch->elapsed();
     span.addAttribute("execution_time_ns", execution_time_watch->elapsed());
-    span.addAttribute("thread_number", thread_number);
 #endif
+
+    span.addAttribute("thread_number", thread_number);
 
     return node->exception == nullptr;
 }
