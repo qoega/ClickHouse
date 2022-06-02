@@ -9,6 +9,7 @@
 
 #include <IO/WriteBufferFromString.h>
 #include <IO/Operators.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 
 namespace DB
 {
@@ -63,6 +64,8 @@ static std::string dumpTasks(const std::unordered_map<std::uintptr_t, PollingQue
 
 PollingQueue::TaskData PollingQueue::wait(std::unique_lock<std::mutex> & lock)
 {
+    OpenTelemetrySpanHolder span("PollingQueue::wait()");
+
     if (is_finished)
         return {};
 
@@ -95,6 +98,8 @@ PollingQueue::TaskData PollingQueue::wait(std::unique_lock<std::mutex> & lock)
 
 void PollingQueue::finish()
 {
+    OpenTelemetrySpanHolder span("PollingQueue::finish()");
+
     is_finished = true;
 
     uint64_t buf = 0;

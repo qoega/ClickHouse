@@ -1,10 +1,11 @@
 #include <Processors/Transforms/AggregatingTransform.h>
 
-#include <Formats/NativeReader.h>
-#include <Processors/ISource.h>
-#include <QueryPipeline/Pipe.h>
-#include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
 #include <Core/ProtocolDefines.h>
+#include <Formats/NativeReader.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
+#include <Processors/ISource.h>
+#include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
+#include <QueryPipeline/Pipe.h>
 
 namespace ProfileEvents
 {
@@ -321,6 +322,7 @@ private:
 
     void initialize()
     {
+
         is_initialized = true;
 
         AggregatedDataVariantsPtr & first = data->at(0);

@@ -2,6 +2,7 @@
 #include <Processors/Executors/PipelineExecutor.h>
 #include <Processors/ISource.h>
 #include <QueryPipeline/QueryPipeline.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 
 
 namespace DB
@@ -93,6 +94,8 @@ void PushingPipelineExecutor::start()
 
 void PushingPipelineExecutor::push(Chunk chunk)
 {
+    OpenTelemetrySpanHolder span("PushingAsyncPipelineExecutor::push");
+
     if (!started)
         start();
 

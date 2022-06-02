@@ -5,6 +5,7 @@
 #include <Processors/Sources/NullSource.h>
 #include <QueryPipeline/QueryPipeline.h>
 #include <Common/setThreadName.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 
 namespace DB
 {
@@ -94,6 +95,8 @@ static void threadFunction(PullingAsyncPipelineExecutor::Data & data, ThreadGrou
 
 bool PullingAsyncPipelineExecutor::pull(Chunk & chunk, uint64_t milliseconds)
 {
+    OpenTelemetrySpanHolder span("PullingAsyncPipelineExecutor::pull(Chunk ...)");
+
     if (!data)
     {
         data = std::make_unique<Data>();
@@ -140,6 +143,8 @@ bool PullingAsyncPipelineExecutor::pull(Chunk & chunk, uint64_t milliseconds)
 
 bool PullingAsyncPipelineExecutor::pull(Block & block, uint64_t milliseconds)
 {
+    OpenTelemetrySpanHolder span("PullingAsyncPipelineExecutor::pull(Block ...)");
+
     Chunk chunk;
 
     if (!pull(chunk, milliseconds))

@@ -43,8 +43,6 @@ static void executeJob(IProcessor * processor)
 {
     try
     {
-        OpenTelemetrySpanHolder span("IProcessor::work() " + processor->getName());
-
         processor->work();
     }
     catch (Exception & exception)
@@ -57,7 +55,7 @@ static void executeJob(IProcessor * processor)
 
 bool ExecutionThreadContext::executeTask()
 {
-    OpenTelemetrySpanHolder span("ExecutionThreadContext::executeTask()" + node->processor->getName());
+    OpenTelemetrySpanHolder span("ExecutionThreadContext::executeTask() " + node->processor->getName());
     std::optional<Stopwatch> execution_time_watch;
 
 #ifndef NDEBUG
@@ -90,7 +88,7 @@ bool ExecutionThreadContext::executeTask()
     span.addAttribute("execution_time_ns", execution_time_watch->elapsed());
 #endif
 
-    span.addAttribute("thread_number", thread_number);
+    span.addAttribute("clickhouse.thread_id", thread_number);
 
     return node->exception == nullptr;
 }

@@ -610,6 +610,8 @@ void TCPHandler::skipData()
 
 void TCPHandler::processInsertQuery()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::processInsertQuery()");
+
     size_t num_threads = state.io.pipeline.getNumThreads();
 
     auto run_executor = [&](auto & executor)
@@ -659,6 +661,8 @@ void TCPHandler::processInsertQuery()
 
 void TCPHandler::processOrdinaryQueryWithProcessors()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::processOrdinaryQueryWithProcessors()");
+
     auto & pipeline = state.io.pipeline;
 
     if (query_context->getSettingsRef().allow_experimental_query_deduplication)
@@ -856,6 +860,8 @@ void TCPHandler::sendExtremes(const Block & extremes)
 
 void TCPHandler::sendProfileEvents()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendProfileEvents()");
+
     if (client_tcp_protocol_version < DBMS_MIN_PROTOCOL_VERSION_WITH_INCREMENTAL_PROFILE_EVENTS)
         return;
 
@@ -1146,6 +1152,8 @@ void TCPHandler::receiveUnexpectedIgnoredPartUUIDs()
 
 String TCPHandler::receiveReadTaskResponseAssumeLocked()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::receiveReadTaskResponseAssumeLocked()");
+
     UInt64 packet_type = 0;
     readVarUInt(packet_type, *in);
     if (packet_type != Protocol::Client::ReadTaskResponse)
@@ -1179,6 +1187,8 @@ String TCPHandler::receiveReadTaskResponseAssumeLocked()
 
 std::optional<PartitionReadResponse> TCPHandler::receivePartitionMergeTreeReadTaskResponseAssumeLocked()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::receivePartitionMergeTreeReadTaskResponseAssumeLocked()");
+
     UInt64 packet_type = 0;
     readVarUInt(packet_type, *in);
     if (packet_type != Protocol::Client::MergeTreeReadTaskResponse)
@@ -1233,6 +1243,8 @@ void TCPHandler::receiveClusterNameAndSalt()
 
 void TCPHandler::receiveQuery()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::receiveQuery()");
+
     UInt64 stage = 0;
     UInt64 compression = 0;
 
@@ -1408,6 +1420,8 @@ void TCPHandler::receiveUnexpectedQuery()
 
 bool TCPHandler::receiveData(bool scalar)
 {
+    OpenTelemetrySpanHolder span("TCPHandler::receiveData()");
+
     initBlockInput();
 
     /// The name of the temporary table for writing data, default to empty string
@@ -1630,6 +1644,8 @@ bool TCPHandler::isQueryCancelled()
 
 void TCPHandler::sendData(const Block & block)
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendData()");
+
     initBlockOutput(block);
 
     auto prev_bytes_written_out = out->count();
@@ -1687,6 +1703,8 @@ void TCPHandler::sendData(const Block & block)
 
 void TCPHandler::sendLogData(const Block & block)
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendLogData()");
+
     initLogsBlockOutput(block);
 
     writeVarUInt(Protocol::Server::Log, *out);
@@ -1699,6 +1717,8 @@ void TCPHandler::sendLogData(const Block & block)
 
 void TCPHandler::sendTableColumns(const ColumnsDescription & columns)
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendTableColumns()");
+
     writeVarUInt(Protocol::Server::TableColumns, *out);
 
     /// Send external table name (empty name is the main table)
@@ -1710,6 +1730,7 @@ void TCPHandler::sendTableColumns(const ColumnsDescription & columns)
 
 void TCPHandler::sendException(const Exception & e, bool with_stack_trace)
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendException()");
     state.io.setAllDataSent();
 
     writeVarUInt(Protocol::Server::Exception, *out);
@@ -1720,6 +1741,7 @@ void TCPHandler::sendException(const Exception & e, bool with_stack_trace)
 
 void TCPHandler::sendEndOfStream()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendEndOfStream()");
     state.sent_all_data = true;
     state.io.setAllDataSent();
 
@@ -1736,6 +1758,7 @@ void TCPHandler::updateProgress(const Progress & value)
 
 void TCPHandler::sendProgress()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendProgress()");
     writeVarUInt(Protocol::Server::Progress, *out);
     auto increment = state.progress.fetchValuesAndResetPiecewiseAtomically();
     increment.write(*out, client_tcp_protocol_version);
@@ -1745,6 +1768,7 @@ void TCPHandler::sendProgress()
 
 void TCPHandler::sendLogs()
 {
+    OpenTelemetrySpanHolder span("TCPHandler::sendLogs()");
     if (!state.logs_queue)
         return;
 

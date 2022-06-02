@@ -9,6 +9,7 @@
 #include <Processors/ISource.h>
 #include <Interpreters/ProcessList.h>
 #include <Interpreters/Context.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 #include <Common/scope_guard_safe.h>
 
 #ifndef NDEBUG
@@ -78,6 +79,8 @@ void PipelineExecutor::finish()
 
 void PipelineExecutor::execute(size_t num_threads)
 {
+    OpenTelemetrySpanHolder span("PipelineExecutor::execute()");
+
     checkTimeLimit();
     if (num_threads < 1)
         num_threads = 1;
@@ -107,6 +110,8 @@ void PipelineExecutor::execute(size_t num_threads)
 
 bool PipelineExecutor::executeStep(std::atomic_bool * yield_flag)
 {
+    OpenTelemetrySpanHolder span("PipelineExecutor::executeStep()");
+
     if (!is_execution_initialized)
     {
         initializeExecution(1);
@@ -156,6 +161,8 @@ bool PipelineExecutor::checkTimeLimit()
 
 void PipelineExecutor::finalizeExecution()
 {
+    OpenTelemetrySpanHolder span("PipelineExecutor::finalizeExecution()");
+
     checkTimeLimit();
 
     if (cancelled)
@@ -268,6 +275,8 @@ void PipelineExecutor::initializeExecution(size_t num_threads)
 
 void PipelineExecutor::executeImpl(size_t num_threads)
 {
+    OpenTelemetrySpanHolder span("PipelineExecutor::executeImpl()");
+
     initializeExecution(num_threads);
 
     using ThreadsData = std::vector<ThreadFromGlobalPool>;

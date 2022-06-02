@@ -1,5 +1,6 @@
 #include <Processors/Executors/StreamingFormatExecutor.h>
 #include <Processors/Transforms/AddingDefaultsTransform.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 #include <iostream>
 
 namespace DB
@@ -40,6 +41,8 @@ size_t StreamingFormatExecutor::execute(ReadBuffer & buffer)
 
 size_t StreamingFormatExecutor::execute()
 {
+    OpenTelemetrySpanHolder span("StreamingFormatExecutor::execute()");
+
     try
     {
         size_t new_rows = 0;

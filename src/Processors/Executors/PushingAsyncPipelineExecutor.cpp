@@ -5,6 +5,7 @@
 #include <Common/ThreadPool.h>
 #include <Common/setThreadName.h>
 #include <Poco/Event.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 
 namespace DB
 {
@@ -170,6 +171,8 @@ void PushingAsyncPipelineExecutor::start()
 
 void PushingAsyncPipelineExecutor::push(Chunk chunk)
 {
+    OpenTelemetrySpanHolder span("PushingAsyncPipelineExecutor::push");
+
     if (!started)
         start();
 
@@ -188,6 +191,8 @@ void PushingAsyncPipelineExecutor::push(Block block)
 
 void PushingAsyncPipelineExecutor::finish()
 {
+    OpenTelemetrySpanHolder span("PushingAsyncPipelineExecutor::finish");
+
     if (finished)
         return;
     finished = true;

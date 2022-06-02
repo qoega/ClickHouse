@@ -4,6 +4,7 @@
 #include <QueryPipeline/QueryPipeline.h>
 #include <Processors/Transforms/AggregatingTransform.h>
 #include <Processors/Sources/NullSource.h>
+#include <Interpreters/OpenTelemetrySpanLog.h>
 
 namespace DB
 {
@@ -41,6 +42,8 @@ const Block & PullingPipelineExecutor::getHeader() const
 
 bool PullingPipelineExecutor::pull(Chunk & chunk)
 {
+    OpenTelemetrySpanHolder span("PullingPipelineExecutor::pull(Chunk ...)");
+
     if (!executor)
         executor = std::make_shared<PipelineExecutor>(pipeline.processors, pipeline.process_list_element);
 
@@ -56,6 +59,8 @@ bool PullingPipelineExecutor::pull(Chunk & chunk)
 
 bool PullingPipelineExecutor::pull(Block & block)
 {
+    OpenTelemetrySpanHolder span("PullingPipelineExecutor::pull(Block ...)");
+
     Chunk chunk;
 
     if (!pull(chunk))
