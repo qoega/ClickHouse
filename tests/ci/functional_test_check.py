@@ -203,16 +203,16 @@ if __name__ == "__main__":
     args = parse_args()
     check_name = args.check_name
     kill_timeout = args.kill_timeout
-    validate_bugix_check = args.validate_bugfix
+    validate_bugfix_check = args.validate_bugfix
 
     flaky_check = "flaky" in check_name.lower()
 
-    run_changed_tests = flaky_check or validate_bugix_check
+    run_changed_tests = flaky_check or validate_bugfix_check
     gh = Github(get_best_robot_token(), per_page=100)
 
     # For validate_bugix_check we need up to date information about labels, so pr_event_from_api is used
     pr_info = PRInfo(
-        need_changed_files=run_changed_tests, pr_event_from_api=validate_bugix_check
+        need_changed_files=run_changed_tests, pr_event_from_api=validate_bugfix_check
     )
 
     atexit.register(update_mergeable_check, gh, pr_info, check_name)
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     if not os.path.exists(temp_path):
         os.makedirs(temp_path)
 
-    if validate_bugix_check and "pr-bugfix" not in pr_info.labels:
+    if validate_bugfix_check and "pr-bugfix" not in pr_info.labels:
         if args.post_commit_status == "file":
             post_commit_status_to_file(
                 os.path.join(temp_path, "post_commit_status.tsv"),

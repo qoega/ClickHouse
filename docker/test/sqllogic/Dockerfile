@@ -1,0 +1,36 @@
+# docker build -t clickhouse/sqllogic-test .
+ARG FROM_TAG=latest
+FROM clickhouse/test-base:$FROM_TAG
+
+RUN apt-get update --yes \
+    && env DEBIAN_FRONTEND=noninteractive \
+        apt-get install --yes --no-install-recommends \
+            wget \
+            git \
+            python3 \
+            python3-dev \
+            python3-pip \
+            sqlite3 \
+            unixodbc \
+            unixodbc-dev \
+            sudo \
+    && apt-get clean
+
+RUN pip3 install \
+    numpy \
+    pyodbc
+
+ARG odbc_driver_url="https://github.com/ClickHouse/clickhouse-odbc/releases/download/v1.1.4.20200302/clickhouse-odbc-1.1.4-Linux.tar.gz"
+
+RUN mkdir -p /tmp/clickhouse-odbc-tmp \
+   && wget -nv -O - ${odbc_driver_url} | tar --strip-components=1 -xz -C /tmp/clickhouse-odbc-tmp \
+   && cp /tmp/clickhouse-odbc-tmp/lib64/*.so /usr/local/lib/ \
+   && odbcinst -i -d -f /tmp/clickhouse-odbc-tmp/share/doc/clickhouse-odbc/config/odbcinst.ini.sample \
+   && odbcinst -i -s -l -f /tmp/clickhouse-odbc-tmp/share/doc/clickhouse-odbc/config/odbc.ini.sample \
+   && rm -rf /tmp/clickhouse-odbc-tmp
+
+ENV TZ=Europe/Moscow
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+COPY run.sh /
+CMD ["/bin/bash", "/run.sh"]
