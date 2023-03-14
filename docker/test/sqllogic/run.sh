@@ -2,6 +2,8 @@
 set -exu
 trap "exit" INT TERM
 
+echo "ENV"
+env
 # fail on errors, verbose and export all env variables
 set -e -x -a
 
@@ -46,28 +48,38 @@ function self_check()
 {
     set -x
 
+    mkdir -p /test_output/self-test-result/sqlite-out
+    mkdir -p /test_output/self-test-result/clickhouse-out
+
     set +e
     /clickhouse-tests/sqllogic/runner.py \
-      --log-file debug_log \
+      --log-file /test_output/self-test-result/debug_log \
       manual \
       --engine odbc \
       --test-input-dir /clickhouse-tests/sqllogic/self-test  \
-      --test-output-dir /test_output/seft-test-result/sqlite-out \
-      --out-report /test_output/seft-test-result/sqlite-out/report
+      --test-output-dir /test_output/self-test-result/sqlite-out \
+      --out-report /test_output/self-test-result/sqlite-out/report \
+      > /test_output/self-test-result/stdout.log 2> /test_output/self-test-result/stderr.log
 
     /clickhouse-tests/sqllogic/runner.py \
-      --log-file debug_log \
+      --log-file /test_output/self-test-result/debug_log \
       manual \
       --engine odbc \
-      --test-input-dir /test_output/seft-test-result/sqlite-out  \
-      --test-output-dir /test_output/seft-test-result/clickhouse-out \
-      --out-report /test_output/seft-test-result/clickhouse-out/report
+      --test-input-dir /test_output/self-test-result/sqlite-out  \
+      --test-output-dir /test_output/self-test-result/clickhouse-out \
+      --out-report /test_output/self-test-result/clickhouse-out/report \
+      >> /test_output/self-test-result/stdout.log 2>> /test_output/self-test-result/stderr.log
     set -e
 }
 
+export -f self_check
+
+timeout "${MAX_RUN_TIME:-900}" bash -c self_check ||:
+
 export -f run_tests
 
-timeout "$MAX_RUN_TIME" bash -c run_tests ||:
+timeout "${MAX_RUN_TIME:-900}" bash -c run_tests ||:
+
 
 #/process_functional_tests_result.py || echo -e "failure\tCannot parse results" > /test_output/check_status.tsv
 

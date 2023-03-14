@@ -80,7 +80,7 @@ def mode_manual(parser):
         else:
             test_input_dir = os.path.realpath(args.test_input_dir)
             test_output_dir = os.path.realpath(args.test_output_dir)
-            logging.debug("dir is: %s", test_input_dir)
+            logging.debug(f"input dir is: {test_input_dir} outdir: {test_output_dir}")
             runner.run_all_tests_from_dir(test_input_dir)
             runner.write_results_to_dir(test_output_dir)
 
@@ -128,9 +128,9 @@ def mode_self_test(parser):
 
         out_dir = os.path.realpath(args.out_dir)
         if not os.path.exists(out_dir):
-            raise NotADirectoryError(out_dir, "dir not found")
+            raise NotADirectoryError(out_dir, "self test: dir not found")
         if not os.path.isdir(out_dir):
-            raise NotADirectoryError(out_dir, "not a dir")
+            raise NotADirectoryError(out_dir, "self test: not a dir")
 
         out_dir_sqlite_complete = os.path.join(out_dir, "sqlite-complete")
         os.makedirs(out_dir_sqlite_complete, exist_ok=True)

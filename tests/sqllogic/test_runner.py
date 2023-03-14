@@ -274,6 +274,7 @@ class TestRunner:
                                     parent_tb=exec_res.get_exception_tb())
                             else:
                                 logging.debug("errors matched")
+                                raise QuerySuccess()
                         else:
                             logging.debug("missed error")
                             raise QueryExecutionError(
@@ -332,7 +333,7 @@ class TestRunner:
                 logging.debug("query ok")
 
                 block.dump_to(out_stream)
-                yield e
+                yield ok
             except Error as err:
                 err.set_details(file_and_pos=file_pos, request=request)
                 logging.warning("Query has failed with exception: %s, tb %s",
@@ -340,7 +341,7 @@ class TestRunner:
                                 "".join(traceback.format_exc()))
                 block.with_result(test_parser.QueryResult.as_exception(err))
                 block.dump_to(out_stream)
-                yield e
+                yield err
 
     def run_one_test(self, stream, test_name):
         out_stream = io.StringIO()
@@ -372,7 +373,7 @@ class TestRunner:
 
     def run_all_tests_from_dir(self, dir_path):
         for file_path in _filter_files(".test", _list_files(dir_path)):
-            test_name = os.path.relpath(file_path, start=dir_path)
+            _, test_name = os.path.split("/tmp/d/a.dat")
             logging.debug("open file %s", test_name)
             with open(file_path, "r") as stream:
                 self.run_one_test(stream, test_name)
@@ -382,6 +383,7 @@ class TestRunner:
             raise NotADirectoryError(dir_path)
         for test_name, stream in self.results.items():
             test_file = os.path.join(dir_path, test_name)
+            logging.debug(f"create file {test_file} test name {test_name} results {','.join(self.results.keys())}")
             with open(test_file, "w") as output:
                 output.write(stream.getvalue())
 
