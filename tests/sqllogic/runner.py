@@ -139,6 +139,7 @@ def mode_self_test(parser):
             runner.run_all_tests_from_dir(self_test_dir)
             runner.write_results_to_dir(out_dir_sqlite_complete)
             runner.write_report(os.path.join(out_dir_sqlite_complete, "report"))
+            runner.write_tsv_report(os.path.join(out_dir_sqlite_complete, "report.tsv"))
 
         out_dir_sqlite_vs_sqlite = os.path.join(out_dir, "sqlite-vs-sqlite")
         os.makedirs(out_dir_sqlite_vs_sqlite, exist_ok=True)
@@ -148,6 +149,7 @@ def mode_self_test(parser):
             runner.run_all_tests_from_dir(out_dir_sqlite_complete)
             runner.write_results_to_dir(out_dir_sqlite_vs_sqlite)
             runner.write_report(os.path.join(out_dir_sqlite_vs_sqlite, "report"))
+            runner.write_tsv_report(os.path.join(out_dir_sqlite_vs_sqlite, "report.tsv"))
 
         out_dir_clickhouse_complete = os.path.join(out_dir, "clickhouse-complete")
         os.makedirs(out_dir_clickhouse_complete, exist_ok=True)
@@ -157,6 +159,7 @@ def mode_self_test(parser):
             runner.run_all_tests_from_dir(self_test_dir)
             runner.write_results_to_dir(out_dir_clickhouse_complete)
             runner.write_report(os.path.join(out_dir_clickhouse_complete, "report"))
+            runner.write_tsv_report(os.path.join(out_dir_clickhouse_complete, "report.tsv"))
 
         out_dir_clickhouse_vs_clickhouse = os.path.join(out_dir, "clickhouse-vs-clickhouse")
         os.makedirs(out_dir_clickhouse_vs_clickhouse, exist_ok=True)
@@ -167,6 +170,7 @@ def mode_self_test(parser):
             runner.run_all_tests_from_dir(out_dir_clickhouse_complete)
             runner.write_results_to_dir(out_dir_clickhouse_vs_clickhouse)
             runner.write_report(os.path.join(out_dir_clickhouse_vs_clickhouse, "report"))
+            runner.write_tsv_report(os.path.join(out_dir_clickhouse_vs_clickhouse, "report.tsv"))
 
         out_dir_sqlite_vs_clickhouse = os.path.join(out_dir, "sqlite-vs-clickhouse")
         os.makedirs(out_dir_sqlite_vs_clickhouse, exist_ok=True)
@@ -177,6 +181,7 @@ def mode_self_test(parser):
             runner.run_all_tests_from_dir(out_dir_sqlite_complete)
             runner.write_results_to_dir(out_dir_sqlite_vs_clickhouse)
             runner.write_report(os.path.join(out_dir_sqlite_vs_clickhouse, "report"))
+            runner.write_tsv_report(os.path.join(out_dir_sqlite_vs_clickhouse, "report.tsv"))
 
     parser.set_defaults(func=calle)
 

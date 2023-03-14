@@ -6,6 +6,7 @@ import os
 import traceback
 import io
 import json
+import csv
 
 import test_parser
 from exceptions import Error, ProgramError, ErrorWithParent, DataResultDiffer
@@ -138,12 +139,19 @@ class OneReport:
         result = dict()
         result["test_name"] = self.test_name
         result["stats"] = self.stats.get_map()
-        result["Requests"] = []
-        requests = result["Requests"]
+        result["requests"] = dict()
+        requests = result["requests"]
         for pos, status in self.cases.items():
-            requests.append({pos: {"status": status.reason, "request": status.request}})
+            name = f"{self.test_name}_{pos}"
+            requests[name] = {"status": status.reason, "request": status.request}
         return result
 
+    def get_requests_map(self):
+        result = dict()
+        for pos, status in self.cases.items():
+            name = f"{self.test_name}_{pos}"
+            result[name] = status.reason
+        return result
 
 class Report:
     def __init__(self, dbms_name):
@@ -180,12 +188,17 @@ class Report:
         result = dict()
         result["dbms_name"] = self.dbms_name
         result["stats"] = self.stats.get_map()
-        result["Files"] = []
-        requests = result["Files"]
+        result["files"] = []
+        requests = result["files"]
         for file, report in self.cases.items():
             requests.append({file: report.get_map()})
         return result
 
+    def get_requests_map(self):
+        result = dict()
+        for file, report in self.cases.items():
+            result.update([{f"{self.dbms_name}_{file}_{pos}", status}  for (pos, status) in report.get_requests_map().items()])
+        return result
 
 class TestRunner:
     def __init__(self, dbms_name, connection):
@@ -373,7 +386,7 @@ class TestRunner:
 
     def run_all_tests_from_dir(self, dir_path):
         for file_path in _filter_files(".test", _list_files(dir_path)):
-            _, test_name = os.path.split("/tmp/d/a.dat")
+            _, test_name = os.path.split(file_path)
             logging.debug("open file %s", test_name)
             with open(file_path, "r") as stream:
                 self.run_one_test(stream, test_name)
@@ -392,6 +405,12 @@ class TestRunner:
             stream.write(
                 json.dumps(self.report.get_map(), indent=4)
             )
+
+    def write_tsv_report(self, report_path):
+        with open(report_path, "w") as stream:
+            writer = csv.writer(stream, delimiter='\t', lineterminator='\n')
+            for key, val in self.report.get_requests_map().items():
+                writer.writerow([key, val])
 
     def run_all_tests_from_streams(self, tests):
         for test_name, stream in tests.items():
