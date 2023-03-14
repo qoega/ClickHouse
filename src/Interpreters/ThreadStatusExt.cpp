@@ -97,7 +97,7 @@ void CurrentThread::defaultThreadDeleter()
 
 void ThreadStatus::setupState(const ThreadGroupStatusPtr & thread_group_)
 {
-    assertState({ThreadState::DetachedFromQuery}, __PRETTY_FUNCTION__);
+    assertState(ThreadState::DetachedFromQuery, __PRETTY_FUNCTION__);
 
     /// Attach or init current thread to thread group and copy useful information from it
     thread_group = thread_group_;
@@ -151,14 +151,31 @@ void ThreadStatus::attachQuery(const ThreadGroupStatusPtr & thread_group_, bool 
     if (thread_state == ThreadState::AttachedToQuery)
     {
         if (check_detached)
-            throw Exception("Can't attach query to the thread, it is already attached", ErrorCodes::LOGICAL_ERROR);
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Can't attach query to the thread, it is already attached");
         return;
     }
 
     if (!thread_group_)
-        throw Exception("Attempt to attach to nullptr thread group", ErrorCodes::LOGICAL_ERROR);
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Attempt to attach to nullptr thread group");
 
     setupState(thread_group_);
+}
+
+ProfileEvents::Counters * ThreadStatus::attachProfileCountersScope(ProfileEvents::Counters * performance_counters_scope)
+{
+    ProfileEvents::Counters * prev_counters = current_performance_counters;
+
+    if (current_performance_counters == performance_counters_scope)
+        /// Allow to attach the same scope multiple times
+        return prev_counters;
+
+    /// Avoid cycles when exiting local scope and attaching back to current thread counters
+    if (performance_counters_scope != &performance_counters)
+        performance_counters_scope->setParent(&performance_counters);
+
+    current_performance_counters = performance_counters_scope;
+
+    return prev_counters;
 }
 
 void ThreadStatus::initPerformanceCounters()
@@ -324,7 +341,7 @@ void ThreadStatus::detachQuery(bool exit_if_already_detached, bool thread_exits)
         return;
     }
 
-    assertState({ThreadState::AttachedToQuery}, __PRETTY_FUNCTION__);
+    assertState(ThreadState::AttachedToQuery, __PRETTY_FUNCTION__);
 
     finalizeQueryProfiler();
     finalizePerformanceCounters();
@@ -335,18 +352,23 @@ void ThreadStatus::detachQuery(bool exit_if_already_detached, bool thread_exits)
         thread_group->threads.erase(this);
     }
     performance_counters.setParent(&ProfileEvents::global_counters);
-    memory_tracker.reset();
 
+    flushUntrackedMemory();
+
+    memory_tracker.reset();
     memory_tracker.setParent(thread_group->memory_tracker.getParent());
 
     query_id.clear();
     query_context.reset();
 
+    /// The memory of thread_group->finished_threads_counters_memory is temporarily moved to this vector, which is deallocated out of critical section.
+    std::vector<ThreadGroupStatus::ProfileEventsCountersAndMemory> move_to_temp;
+
     /// Avoid leaking of ThreadGroupStatus::finished_threads_counters_memory
     /// (this is in case someone uses system thread but did not call getProfileEventsCountersAndMemoryForThreads())
     {
         std::lock_guard guard(thread_group->mutex);
-        auto stats = std::move(thread_group->finished_threads_counters_memory);
+        move_to_temp = std::move(thread_group->finished_threads_counters_memory);
     }
 
     thread_group.reset();
@@ -530,15 +552,16 @@ void CurrentThread::detachQueryIfNotDetached()
 }
 
 
-CurrentThread::QueryScope::QueryScope(ContextMutablePtr query_context)
+CurrentThread::QueryScope::QueryScope(ContextMutablePtr query_context, std::function<void()> fatal_error_callback)
 {
     CurrentThread::initializeQuery();
     CurrentThread::attachQueryContext(query_context);
     if (!query_context->hasQueryContext())
         query_context->makeQueryContext();
+    setFatalErrorCallback(fatal_error_callback);
 }
 
-CurrentThread::QueryScope::QueryScope(ContextPtr query_context)
+CurrentThread::QueryScope::QueryScope(ContextPtr query_context, std::function<void()> fatal_error_callback)
 {
     if (!query_context->hasQueryContext())
         throw Exception(
@@ -546,6 +569,7 @@ CurrentThread::QueryScope::QueryScope(ContextPtr query_context)
 
     CurrentThread::initializeQuery();
     CurrentThread::attachQueryContext(query_context);
+    setFatalErrorCallback(fatal_error_callback);
 }
 
 void CurrentThread::QueryScope::logPeakMemoryUsage()
@@ -565,6 +589,7 @@ CurrentThread::QueryScope::~QueryScope()
         if (log_peak_memory_usage_in_destructor)
             logPeakMemoryUsage();
 
+        setFatalErrorCallback({});
         CurrentThread::detachQueryIfNotDetached();
     }
     catch (...)

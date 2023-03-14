@@ -15,6 +15,7 @@
 #include <Common/CurrentMetrics.h>
 #include <Common/CurrentThread.h>
 #include <Common/ThreadPool.h>
+#include <base/scope_guard.h>
 
 
 namespace DB
@@ -89,13 +90,8 @@ private:
     /// Tasks ordered by scheduled time.
     DelayedTasks delayed_tasks;
 
-    /// Thread group used for profiling purposes
-    ThreadGroupStatusPtr thread_group;
-
     CurrentMetrics::Metric tasks_metric;
     std::string thread_name;
-
-    void attachToThreadGroup();
 };
 
 

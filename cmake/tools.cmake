@@ -15,17 +15,17 @@ execute_process(COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE COMPILER
 message (STATUS "Using compiler:\n${COMPILER_SELF_IDENTIFICATION}")
 
 # Require minimum compiler versions
-set (CLANG_MINIMUM_VERSION 12)
+set (CLANG_MINIMUM_VERSION 15)
 set (XCODE_MINIMUM_VERSION 12.0)
 set (APPLE_CLANG_MINIMUM_VERSION 12.0.0)
 set (GCC_MINIMUM_VERSION 11)
 
 if (COMPILER_GCC)
+    message (FATAL_ERROR "Compilation with GCC is unsupported. Please use Clang instead.")
+
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS ${GCC_MINIMUM_VERSION})
         message (FATAL_ERROR "Compilation with GCC version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, the minimum required version is ${GCC_MINIMUM_VERSION}.")
     endif ()
-
-    message (WARNING "Compilation with GCC is unsupported. Please use Clang instead.")
 
 elseif (COMPILER_CLANG)
     if (CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
@@ -53,20 +53,23 @@ list (GET COMPILER_VERSION_LIST 0 COMPILER_VERSION_MAJOR)
 # Example values: `lld-10`, `gold`.
 option (LINKER_NAME "Linker name or full path")
 
-if (NOT LINKER_NAME)
-    if (COMPILER_GCC)
-        find_program (LLD_PATH NAMES "ld.lld")
-        find_program (GOLD_PATH NAMES "ld.gold")
-    elseif (COMPILER_CLANG)
-        # llvm lld is a generic driver.
-        # Invoke ld.lld (Unix), ld64.lld (macOS), lld-link (Windows), wasm-ld (WebAssembly) instead
-        if (OS_LINUX)
-            find_program (LLD_PATH NAMES "ld.lld-${COMPILER_VERSION_MAJOR}" "ld.lld")
-        elseif (OS_DARWIN)
-            find_program (LLD_PATH NAMES "ld64.lld-${COMPILER_VERSION_MAJOR}" "ld64.lld")
+# s390x doesnt support lld
+if (NOT ARCH_S390X)
+    if (NOT LINKER_NAME)
+        if (COMPILER_GCC)
+            find_program (LLD_PATH NAMES "ld.lld")
+            find_program (GOLD_PATH NAMES "ld.gold")
+        elseif (COMPILER_CLANG)
+            # llvm lld is a generic driver.
+            # Invoke ld.lld (Unix), ld64.lld (macOS), lld-link (Windows), wasm-ld (WebAssembly) instead
+            if (OS_LINUX)
+                find_program (LLD_PATH NAMES "ld.lld-${COMPILER_VERSION_MAJOR}" "ld.lld")
+            elseif (OS_DARWIN)
+                find_program (LLD_PATH NAMES "ld64.lld-${COMPILER_VERSION_MAJOR}" "ld64.lld")
+            endif ()
+            find_program (GOLD_PATH NAMES "ld.gold" "gold")
         endif ()
-        find_program (GOLD_PATH NAMES "ld.gold" "gold")
-    endif ()
+    endif()
 endif()
 
 if ((OS_LINUX OR OS_DARWIN) AND NOT LINKER_NAME)
@@ -83,7 +86,7 @@ if ((OS_LINUX OR OS_DARWIN) AND NOT LINKER_NAME)
 
     if (NOT LINKER_NAME)
         if (GOLD_PATH)
-            message (WARNING "Linking with gold is not recommended. Please use lld.")
+            message (FATAL_ERROR "Linking with gold is unsupported. Please use lld.")
             if (COMPILER_GCC)
                 set (LINKER_NAME "gold")
             else ()

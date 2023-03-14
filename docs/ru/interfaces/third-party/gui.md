@@ -177,19 +177,20 @@ sidebar_label: "Визуальные интерфейсы от сторонни�
 
 ### Yandex DataLens {#yandex-datalens}
 
-[Yandex DataLens](https://cloud.yandex.ru/services/datalens) — cервис визуализации и анализа данных.
+[Yandex DataLens](https://datalens.yandex.ru) — cервис визуализации и анализа данных.
 
 Основные возможности:
 
 -   Широкий выбор инструментов визуализации, от простых столбчатых диаграмм до сложных дашбордов.
 -   Возможность опубликовать дашборды на широкую аудиторию.
 -   Поддержка множества источников данных, включая ClickHouse.
--   Хранение материализованных данных в кластере ClickHouse DataLens.
 
-Для небольших проектов DataLens [доступен бесплатно](https://cloud.yandex.ru/docs/datalens/pricing), в том числе и для коммерческого использования.
+DataLens [доступен бесплатно](https://cloud.yandex.ru/docs/datalens/pricing), в том числе и для коммерческого использования.
 
+-   [Знакомство с DataLens]((https://youtu.be/57ngi_6BINE).
+-   [Чат сообщества DataLens](https://t.me/YandexDataLens)
 -   [Документация DataLens](https://cloud.yandex.ru/docs/datalens/).
--   [Пособие по визуализации данных из ClickHouse](https://cloud.yandex.ru/docs/solutions/datalens/data-from-ch-visualization).
+-   [Сценарий по визуализации данных из ClickHouse](https://cloud.yandex.ru/docs/solutions/datalens/data-from-ch-visualization).
 
 ### Holistics Software {#holistics-software}
 
@@ -259,6 +260,3 @@ SeekTable [бесплатен](https://www.seektable.com/help/cloud-pricing) д�
 
 Протестировать TABLUM.IO без разворачивания на собственном сервере можно [здесь](https://tablum.io/try).
 Подробно о продукте смотрите на [TABLUM.IO](https://tablum.io/)
-
-
-[Original article](https://clickhouse.com/docs/en/interfaces/third-party/gui/) <!--hide-->

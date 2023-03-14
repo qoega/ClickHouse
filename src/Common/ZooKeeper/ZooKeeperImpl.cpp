@@ -342,7 +342,6 @@ ZooKeeper::ZooKeeper(
         default_acls.emplace_back(std::move(acl));
     }
 
-
     /// It makes sense (especially, for async requests) to inject a fault in two places:
     /// pushRequest (before request is sent) and receiveEvent (after request was executed).
     if (0 < args.send_fault_probability && args.send_fault_probability <= 1)
@@ -359,12 +358,27 @@ ZooKeeper::ZooKeeper(
     if (!args.auth_scheme.empty())
         sendAuth(args.auth_scheme, args.identity);
 
-    send_thread = ThreadFromGlobalPool([this] { sendThread(); });
-    receive_thread = ThreadFromGlobalPool([this] { receiveThread(); });
+    try
+    {
+        send_thread = ThreadFromGlobalPool([this] { sendThread(); });
+        receive_thread = ThreadFromGlobalPool([this] { receiveThread(); });
 
-    initApiVersion();
+        initApiVersion();
 
-    ProfileEvents::increment(ProfileEvents::ZooKeeperInit);
+        ProfileEvents::increment(ProfileEvents::ZooKeeperInit);
+    }
+    catch (...)
+    {
+        tryLogCurrentException(log, "Failed to connect to ZooKeeper");
+
+        if (send_thread.joinable())
+            send_thread.join();
+
+        if (receive_thread.joinable())
+            receive_thread.join();
+
+        throw;
+    }
 }
 
 
@@ -466,7 +480,7 @@ void ZooKeeper::connect(
     }
     else
     {
-        LOG_TEST(log, "Connected to ZooKeeper at {} with session_id {}{}", socket.peerAddress().toString(), session_id, fail_reasons.str());
+        LOG_INFO(log, "Connected to ZooKeeper at {} with session_id {}{}", socket.peerAddress().toString(), session_id, fail_reasons.str());
     }
 }
 
@@ -509,7 +523,9 @@ void ZooKeeper::receiveHandshake()
         /// It's better for faster failover than just connection drop.
         /// Implemented in clickhouse-keeper.
         if (protocol_version_read == KEEPER_PROTOCOL_VERSION_CONNECTION_REJECT)
-            throw Exception(Error::ZCONNECTIONLOSS, "Keeper server rejected the connection during the handshake. Possibly it's overloaded, doesn't see leader or stale");
+            throw Exception(Error::ZCONNECTIONLOSS,
+                            "Keeper server rejected the connection during the handshake. "
+                            "Possibly it's overloaded, doesn't see leader or stale");
         else
             throw Exception(Error::ZMARSHALLINGERROR, "Unexpected protocol version: {}", protocol_version_read);
     }
@@ -676,7 +692,7 @@ void ZooKeeper::receiveThread()
                 if (earliest_operation)
                 {
                     throw Exception(Error::ZOPERATIONTIMEOUT, "Operation timeout (no response) for request {} for path: {}",
-                                    earliest_operation->request->getOpNum(), earliest_operation->request->getPath());
+                        toString(earliest_operation->request->getOpNum()), earliest_operation->request->getPath());
                 }
                 waited_us += max_wait_us;
                 if (waited_us >= args.session_timeout_ms * 1000)
@@ -825,7 +841,7 @@ void ZooKeeper::receiveEvent()
         if (length != actual_length)
             throw Exception(Error::ZMARSHALLINGERROR, "Response length doesn't match. Expected: {}, actual: {}", length, actual_length);
 
-        logOperationIfNeeded(request_info.request, response, /* finalize= */ false, elapsed_ms);   //-V614
+        logOperationIfNeeded(request_info.request, response, /* finalize= */ false, elapsed_ms);
     }
     catch (...)
     {
@@ -867,11 +883,11 @@ void ZooKeeper::finalize(bool error_send, bool error_receive, const String & rea
     /// If some thread (send/receive) already finalizing session don't try to do it
     bool already_started = finalization_started.test_and_set();
 
-    LOG_TEST(log, "Finalizing session {}: finalization_started={}, queue_finished={}, reason={}",
-             session_id, already_started, requests_queue.isFinished(), reason);
-
     if (already_started)
         return;
+
+    LOG_INFO(log, "Finalizing session {}. finalization_started: {}, queue_finished: {}, reason: '{}'",
+             session_id, already_started, requests_queue.isFinished(), reason);
 
     auto expire_session_if_not_expired = [&]
     {
