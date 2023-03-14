@@ -41,6 +41,13 @@ function run_tests()
     /clickhouse-tests/sqllogic/runner.py --help 2>&1 \
         | ts '%Y-%m-%d %H:%M:%S' \
         | tee -a test_output/test_result.txt
+
+    /clickhouse-tests/sqllogic/runner.py --log-file /test_output/runner.log \
+      self-test \
+      --self-test-dir /clickhouse-tests/sqllogic/self-test/test.test \
+      --out-dir /test_output/self-test-result/sqlite-out \
+      | ts '%Y-%m-%d %H:%M:%S' \
+      | tee -a test_output/test_result.txt
     set -e
 }
 
@@ -61,14 +68,6 @@ function self_check()
       --out-report /test_output/self-test-result/sqlite-out/report \
       > /test_output/self-test-result/stdout.log 2> /test_output/self-test-result/stderr.log
 
-    /clickhouse-tests/sqllogic/runner.py \
-      --log-file /test_output/self-test-result/debug_log \
-      manual \
-      --engine odbc \
-      --test-input-dir /test_output/self-test-result/sqlite-out  \
-      --test-output-dir /test_output/self-test-result/clickhouse-out \
-      --out-report /test_output/self-test-result/clickhouse-out/report \
-      >> /test_output/self-test-result/stdout.log 2>> /test_output/self-test-result/stderr.log
     set -e
 }
 
