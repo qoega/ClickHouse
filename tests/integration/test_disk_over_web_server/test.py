@@ -22,6 +22,7 @@ def cluster():
             stay_alive=True,
             with_zookeeper=True,
             allow_analyzer=False,
+            macros={"shard": 1, "replica": 1},
         )
         cluster.add_instance(
             "node3",
@@ -293,14 +294,14 @@ def test_unavailable_server(cluster):
 
 
 def test_replicated_database(cluster):
-    node1 = cluster.instances["node3"]
-    node1.query(
+    node3 = cluster.instances["node3"]
+    node3.query(
         "CREATE DATABASE rdb ENGINE=Replicated('/test/rdb', 's1', 'r1')",
         settings={"allow_experimental_database_replicated": 1},
     )
 
     global uuids
-    node1.query(
+    node3.query(
         """
         CREATE TABLE rdb.table0 UUID '{}'
         (id Int32) ENGINE = MergeTree() ORDER BY id
@@ -317,8 +318,29 @@ def test_replicated_database(cluster):
     )
     node2.query("SYSTEM SYNC DATABASE REPLICA rdb")
 
-    assert node1.query("SELECT count() FROM rdb.table0") == "5000000\n"
+    assert node3.query("SELECT count() FROM rdb.table0") == "5000000\n"
     assert node2.query("SELECT count() FROM rdb.table0") == "5000000\n"
 
-    node1.query("DROP DATABASE rdb SYNC")
+    node3.query("DROP DATABASE rdb SYNC")
     node2.query("DROP DATABASE rdb SYNC")
+
+def test_replicated_create(cluster):
+    """
+    We should be able to attach MergeTree table from DiskWeb as ReplicatedMergeTree table.
+    It should be readonly and work similar to MergeTree.
+    """
+    node2 = cluster.instances["node2"]
+    global uuids
+    assert len(uuids) == 3
+    for i in range(3):
+        node2.query(
+            """
+            CREATE TABLE test{} UUID '{}'
+            (id Int32) ENGINE = ReplicatedMergeTree() ORDER BY id
+            SETTINGS storage_policy = 'web';
+        """.format(
+                i, uuids[i], i, i
+            )
+        )
+    for i in range(3):
+        node2.query(f"DROP TABLE test{i};")
