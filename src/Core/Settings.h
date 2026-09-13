@@ -16,6 +16,7 @@
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace boost
@@ -144,7 +145,34 @@ struct Settings
     Settings & operator=(const Settings & other);
     bool operator==(const Settings & other) const;
 
-    COMMON_SETTINGS_SUPPORTED_TYPES(Settings, DECLARE_SETTING_SUBSCRIPT_OPERATOR)
+    /// An exact, cheap cache-key comparison. A false result need not imply different effective values.
+    bool sharesSnapshotWith(const Settings & other) const;
+
+    /// A server cache must not pin built-in storage charged to a query.
+    bool hasServerOwnedStorage() const;
+
+    /// Reads do not expose a mutable field, including when the `Settings` wrapper is mutable.
+    /// A borrowed field reference must not be retained across a mutation of this object.
+#define DECLARE_SETTINGS_READ(CLASS_NAME, TYPE) const SettingField##TYPE & operator[](CLASS_NAME##TYPE index) const;
+    COMMON_SETTINGS_SUPPORTED_TYPES(Settings, DECLARE_SETTINGS_READ)
+#undef DECLARE_SETTINGS_READ
+
+    /// Typed assignments retain the field's existing assignment semantics, without named-setting hooks.
+    template <typename FieldType, typename Value>
+    void set(SettingIndex<Settings, FieldType> index, Value && value)
+    {
+        /// Complete assignment before detaching: `value` may refer to a field in this snapshot.
+        FieldType replacement((*this)[index]);
+        replacement = std::forward<Value>(value);
+        getMutable(index) = std::move(replacement);
+    }
+
+    template <typename FieldType>
+    void setChanged(SettingIndex<Settings, FieldType> index, bool changed)
+    {
+        if ((*this)[index].changed != changed)
+            getMutable(index).setChanged(changed);
+    }
 
     /// General API as needed
     bool has(std::string_view name) const;
@@ -217,6 +245,10 @@ struct Settings
     static void checkNoSettingNamesAtTopLevel(const Poco::Util::AbstractConfiguration & config, const String & config_path);
 
 private:
+#define DECLARE_SETTINGS_MUTATION(CLASS_NAME, TYPE) SettingField##TYPE & getMutable(CLASS_NAME##TYPE index);
+    COMMON_SETTINGS_SUPPORTED_TYPES(Settings, DECLARE_SETTINGS_MUTATION)
+#undef DECLARE_SETTINGS_MUTATION
+
     std::unique_ptr<SettingsImpl> impl;
 };
 

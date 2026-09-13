@@ -37,6 +37,7 @@
 #include <Common/isLocalAddress.h>
 #include <Common/ConcurrencyControl.h>
 #include <Common/SystemAllocatedMemoryHolder.h>
+#include <Common/MemoryTrackerBlockerInThread.h>
 #include <Coordination/KeeperDispatcher.h>
 #include <Core/BackgroundSchedulePool.h>
 #include <Core/Settings.h>
@@ -2547,8 +2548,36 @@ void Context::setCurrentProfileWithLock(const UUID & profile_id, bool check_cons
 void Context::setCurrentProfilesWithLock(const SettingsProfilesInfo & profiles_info, bool check_constraints, const std::lock_guard<ContextSharedMutex> & lock)
 {
     if (check_constraints)
+    {
         checkSettingsConstraintsWithLock(profiles_info.settings, SettingSource::PROFILE);
-    applySettingsChangesWithLock(profiles_info.settings, lock);
+        applySettingsChangesWithLock(profiles_info.settings, lock);
+    }
+    else
+    {
+        /// Login profiles are immutable and already include the user and enabled-role generation.
+        /// Keep explicit `SET profile` on its ordinary constraint-checking path.
+        const auto type = getApplicationType();
+        const bool sanity_clamp = type == ApplicationType::LOCAL || type == ApplicationType::SERVER;
+        if (auto resolved = profiles_info.tryGetCachedSettings(*settings, sanity_clamp))
+        {
+            *settings = *resolved;
+            need_recalculate_access = true;
+        }
+        else if (settings->hasServerOwnedStorage())
+        {
+            const Settings inherited(*settings);
+            /// A published login configuration belongs to the server, not the first login query.
+            MemoryTrackerBlockerInThread guard;
+            applySettingsChangesWithLock(profiles_info.settings, lock);
+            profiles_info.cacheSettings(inherited, *settings, sanity_clamp);
+        }
+        else
+        {
+            /// Public profile application can start from query-local storage, unlike ordinary login.
+            /// Such an input is not eligible for a server cache that would outlive its query.
+            applySettingsChangesWithLock(profiles_info.settings, lock);
+        }
+    }
     settings_constraints_and_current_profiles = profiles_info.getConstraintsAndProfileIDs(settings_constraints_and_current_profiles);
     contextSanityClampSettingsWithLock(*this, *settings, lock);
 }
@@ -3641,19 +3670,19 @@ void Context::checkMergeTreeSettingsConstraintsWithLock(const MergeTreeSettings 
 
 void Context::checkSettingsConstraints(const AlterSettingsProfileElements & profile_elements, SettingSource source)
 {
-    SharedLockGuard lock(mutex);
+    std::lock_guard lock(mutex);
     checkSettingsConstraintsWithLock(profile_elements, source);
 }
 
 void Context::checkSettingsConstraints(const SettingChange & change, SettingSource source)
 {
-    SharedLockGuard lock(mutex);
+    std::lock_guard lock(mutex);
     checkSettingsConstraintsWithLock(change, source);
 }
 
 void Context::checkSettingsConstraints(const SettingsChanges & changes, SettingSource source)
 {
-    SharedLockGuard lock(mutex);
+    std::lock_guard lock(mutex);
     settings->checkShorthandChanges(changes);
     getSettingsConstraintsAndCurrentProfilesWithLock()->constraints.check(*settings, changes, source);
     doSettingsSanityCheckClamp(*settings, getLogger("SettingsSanity"));
@@ -3667,13 +3696,13 @@ void Context::checkSettingsConstraintsForSettingsReset(const std::vector<String>
 
 void Context::checkSettingsConstraints(SettingsChanges & changes, SettingSource source)
 {
-    SharedLockGuard lock(mutex);
+    std::lock_guard lock(mutex);
     checkSettingsConstraintsWithLock(changes, source);
 }
 
 void Context::clampToSettingsConstraints(SettingsChanges & changes, SettingSource source)
 {
-    SharedLockGuard lock(mutex);
+    std::lock_guard lock(mutex);
     clampToSettingsConstraintsWithLock(changes, source);
 }
 
@@ -3999,15 +4028,14 @@ void Context::makeQueryContextForMerge(const MergeTreeSettings & merge_tree_sett
 {
     makeQueryContext();
     classifier.reset(); // It is assumed that there are no active queries running using this classifier, otherwise this will lead to crashes
-    (*settings)[Setting::workload] = merge_tree_settings[MergeTreeSetting::merge_workload].value.empty() ? getMergeWorkload() : merge_tree_settings[MergeTreeSetting::merge_workload];
+    settings->set(Setting::workload, merge_tree_settings[MergeTreeSetting::merge_workload].value.empty() ? getMergeWorkload() : merge_tree_settings[MergeTreeSetting::merge_workload]);
 }
 
 void Context::makeQueryContextForMutate(const MergeTreeSettings & merge_tree_settings)
 {
     makeQueryContext();
     classifier.reset(); // It is assumed that there are no active queries running using this classifier, otherwise this will lead to crashes
-    (*settings)[Setting::workload]
-        = merge_tree_settings[MergeTreeSetting::mutation_workload].value.empty() ? getMutationWorkload() : merge_tree_settings[MergeTreeSetting::mutation_workload];
+    settings->set(Setting::workload, merge_tree_settings[MergeTreeSetting::mutation_workload].value.empty() ? getMutationWorkload() : merge_tree_settings[MergeTreeSetting::mutation_workload]);
 }
 
 void Context::makeSessionContext()
