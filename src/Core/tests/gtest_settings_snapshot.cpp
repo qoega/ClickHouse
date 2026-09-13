@@ -1,14 +1,18 @@
 #include <Access/AccessControl.h>
+#include <Access/EnabledSettings.h>
 #include <Access/SettingsProfilesInfo.h>
+#include <Access/User.h>
 #include <Core/Settings.h>
 #include <Core/SettingsSnapshot.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromString.h>
+#include <Interpreters/Context.h>
 #include <gtest/gtest.h>
 #include <Common/CurrentThread.h>
 #include <Common/Exception.h>
 #include <Common/MemoryTracker.h>
 #include <Common/ThreadStatus.h>
+#include <Common/tests/gtest_global_context.h>
 #include <base/scope_guard.h>
 
 #include <atomic>
@@ -280,6 +284,46 @@ GTEST_TEST(SettingsSnapshot, ResolvedProfileCacheSharesAndReclaimsReplacedEntrie
     EXPECT_TRUE(replaced.expired());
     EXPECT_EQ(surviving[Setting::max_threads].value, 7);
     EXPECT_EQ((*profile.tryGetCachedSettings(input, true))[Setting::max_threads].value, 8);
+}
+
+GTEST_TEST(SettingsSnapshot, SetUserDoesNotCacheInheritedCustomSettings)
+{
+    auto global_context = getMutableContext().context;
+    auto & access_control = global_context->getAccessControl();
+    access_control.addMemoryStorage("gtest_settings_snapshot_memory", /*allow_backup_=*/ false);
+    auto user = std::make_shared<User>();
+    user->setName("gtest_settings_snapshot_user");
+    const auto user_id = access_control.insert(user);
+    SCOPE_EXIT({ access_control.remove(user_id); });
+    const auto enabled_settings = access_control.getEnabledSettings(user_id, user->settings, {}, {});
+    auto profiles = enabled_settings->getInfo();
+    const auto type = global_context->getApplicationType();
+    const bool sanity_clamp = type == Context::ApplicationType::LOCAL || type == Context::ApplicationType::SERVER;
+
+    Settings inherited;
+    ASSERT_TRUE(inherited.hasServerOwnedStorage());
+    auto context = Context::createCopy(global_context);
+    context->setSettings(inherited);
+    context->setUser(user_id);
+    auto cached = profiles->tryGetCachedSettings(inherited, sanity_clamp);
+    ASSERT_TRUE(cached);
+
+    /// Session-level `EXECUTE AS` and deferred executors can switch users on an existing context.
+    /// Custom-only changes must not populate the server cache or evict the ordinary login entry.
+    for (const Field & value : {Field(String(256, 'q')), Field(Map{Tuple{String("key"), String(256, 'v')}})})
+    {
+        Settings query_settings(inherited);
+        query_settings.setCustom("custom_snapshot", value);
+        EXPECT_FALSE(query_settings.hasServerOwnedStorage());
+        context->setSettings(query_settings);
+        context->setUser(user_id);
+        EXPECT_EQ(context->getSettingsRef().get("custom_snapshot"), value);
+        EXPECT_FALSE(profiles->tryGetCachedSettings(query_settings, sanity_clamp));
+        EXPECT_EQ(profiles->tryGetCachedSettings(inherited, sanity_clamp).get(), cached.get());
+
+        query_settings.setDefaultValue("custom_snapshot");
+        EXPECT_TRUE(query_settings.hasServerOwnedStorage());
+    }
 }
 
 /// Like the allocation-interceptor tests, this requires tracked `new` and `delete`.

@@ -9668,6 +9668,12 @@ struct SettingsImpl : public BaseSettings<SettingsTraits>, public IHints<2>
         return true;
     }
 
+    bool hasServerOwnedStorage() const
+    {
+        /// Custom values have no ownership metadata, so they cannot establish cache eligibility.
+        return custom_settings_map.empty() && BaseSettings<SettingsTraits>::hasServerOwnedStorage();
+    }
+
     /** Set multiple settings from "profile" (in server configuration file (users.xml), profiles contain groups of multiple settings).
         * The profile can also be set using the `set` functions, like the profile setting.
         */

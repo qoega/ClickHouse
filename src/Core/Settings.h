@@ -148,7 +148,7 @@ struct Settings
     /// An exact, cheap cache-key comparison. A false result need not imply different effective values.
     bool sharesSnapshotWith(const Settings & other) const;
 
-    /// A server cache must not pin built-in storage charged to a query.
+    /// A server cache must not pin query-owned storage or custom values with unknown ownership.
     bool hasServerOwnedStorage() const;
 
     /// Reads do not expose a mutable field, including when the `Settings` wrapper is mutable.
