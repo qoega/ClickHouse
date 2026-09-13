@@ -35,12 +35,6 @@ namespace ErrorCodes
     extern const int CANNOT_ALLOCATE_MEMORY;
 }
 
-struct WriteBufferFromAzureBlobStorage::PartData
-{
-    Memory<> memory;
-    size_t data_size = 0;
-};
-
 static BufferAllocationPolicyPtr createBufferAllocationPolicy(const AzureBlobStorage::RequestSettings & settings)
 {
     /// Validate the multipart upload settings here rather than in `getRequestSettings`: this is the

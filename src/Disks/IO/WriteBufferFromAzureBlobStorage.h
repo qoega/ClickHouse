@@ -49,7 +49,11 @@ public:
     void sync() override { next(); }
 
 private:
-    struct PartData;
+    struct PartData
+    {
+        Memory<> memory;
+        size_t data_size = 0;
+    };
 
     void writeMultipartUpload();
     void writePart(PartData && part_data);
