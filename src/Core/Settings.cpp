@@ -10174,7 +10174,7 @@ Field Settings::get(std::string_view name) const
 void Settings::set(std::string_view name, const Field & value)
 {
     /// The input can be a `Field` borrowed from a container in the chunk being detached.
-    const Field stable_value(value);
+    const Field stable_value(value); // NOLINT(performance-unnecessary-copy-initialization): the input must survive chunk detachment.
     impl->set(name, stable_value);
 }
 

@@ -38,7 +38,7 @@ struct SettingsSnapshotAllocator
     }
 
     template <typename U>
-    SettingsSnapshotAllocator(const SettingsSnapshotAllocator<U, kind, separately_accounted_bytes> & other)
+    explicit SettingsSnapshotAllocator(const SettingsSnapshotAllocator<U, kind, separately_accounted_bytes> & other)
         : server_owned(other.server_owned)
     {
     }

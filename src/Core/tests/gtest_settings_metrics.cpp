@@ -99,7 +99,7 @@ GTEST_TEST(SettingsMetrics, EmbeddedWrappersAreCountedOnce)
 
     Settings warmup;
     const auto before = metrics();
-    Int64 unadjusted_bytes;
+    Int64 unadjusted_bytes = 0;
     {
         auto cache = std::allocate_shared<CachedSettings>(SettingsSnapshotAllocator<CachedSettings>{true});
         unadjusted_bytes = metrics()[5] - before[5];
