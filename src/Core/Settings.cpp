@@ -10110,6 +10110,11 @@ Settings & Settings::operator=(const Settings & other)
     return *this;
 }
 
+void Settings::swap(Settings & other) noexcept
+{
+    impl.swap(other.impl);
+}
+
 bool Settings::operator==(const Settings & other) const
 {
     return *impl == *other.impl;

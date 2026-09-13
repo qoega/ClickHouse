@@ -143,6 +143,7 @@ struct Settings
     ~Settings();
 
     Settings & operator=(const Settings & other);
+    void swap(Settings & other) noexcept;
     bool operator==(const Settings & other) const;
 
     /// An exact, cheap cache-key comparison. A false result need not imply different effective values.

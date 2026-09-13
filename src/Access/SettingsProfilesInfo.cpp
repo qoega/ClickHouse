@@ -33,13 +33,15 @@ std::shared_ptr<const Settings> SettingsProfilesInfo::tryGetCachedSettings(const
     return std::shared_ptr<const Settings>(cached_settings, &cached_settings->output);
 }
 
-void SettingsProfilesInfo::cacheSettings(const Settings & input, const Settings & output, bool sanity_clamp) const
+std::shared_ptr<const Settings> SettingsProfilesInfo::cacheSettings(const Settings & input, const Settings & output, bool sanity_clamp) const
 {
     /// The embedded `Settings` wrappers account for their own bytes.
     using Allocator = SettingsSnapshotAllocator<CachedSettings, SettingsAllocationKind::SnapshotState, 2 * sizeof(Settings)>;
     auto replacement = std::allocate_shared<CachedSettings>(Allocator{true}, input, output, sanity_clamp);
+    std::shared_ptr<const Settings> result(replacement, &replacement->output);
     std::lock_guard lock(cached_settings_mutex);
     cached_settings = std::move(replacement);
+    return result;
 }
 
 namespace ErrorCodes

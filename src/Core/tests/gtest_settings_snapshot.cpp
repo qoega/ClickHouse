@@ -326,8 +326,103 @@ GTEST_TEST(SettingsSnapshot, SetUserDoesNotCacheInheritedCustomSettings)
     }
 }
 
+GTEST_TEST(SettingsSnapshot, FailedProfileResolutionPreservesContextAndPrincipal)
+{
+    auto global_context = getMutableContext().context;
+    auto & access_control = global_context->getAccessControl();
+    access_control.addMemoryStorage("gtest_settings_snapshot_failure_memory", /*allow_backup_=*/ false);
+    auto previous_user = std::make_shared<User>();
+    previous_user->setName("gtest_settings_snapshot_previous_user");
+    const auto previous_user_id = access_control.insert(previous_user);
+    SCOPE_EXIT({ access_control.remove(previous_user_id); });
+    auto user = std::make_shared<User>();
+    user->setName("gtest_settings_snapshot_failure_user");
+    auto & valid_change = user->settings.emplace_back();
+    valid_change.setting_name = "log_comment";
+    valid_change.value = String("partially applied profile");
+    auto & invalid_change = user->settings.emplace_back();
+    invalid_change.setting_name = "max_query_size";
+    invalid_change.value = String("not a number");
+    const auto user_id = access_control.insert(user);
+    SCOPE_EXIT({ access_control.remove(user_id); });
+    const auto enabled_settings = access_control.getEnabledSettings(user_id, user->settings, {}, {});
+    const auto profiles = enabled_settings->getInfo();
+
+    auto context = Context::createCopy(global_context);
+    Settings inherited;
+    auto previous_grants = std::make_shared<const AccessRightsElements>();
+    context->setUser(previous_user_id, {}, previous_grants, 1234);
+    context->setSettings(inherited);
+    const auto previous_profiles = context->getSettingsConstraintsAndCurrentProfiles();
+    const auto * wrapper = &context->getSettingsRef();
+    ASSERT_TRUE(context->getSettingsRef().hasServerOwnedStorage());
+    EXPECT_THROW(context->setUser(user_id), Exception);
+    EXPECT_EQ(context->getUserID(), previous_user_id);
+    EXPECT_EQ(context->getAuthenticationGrants(), previous_grants);
+    EXPECT_EQ(context->getAuthenticationValidUntil(), 1234);
+    EXPECT_EQ(context->getSettingsConstraintsAndCurrentProfiles(), previous_profiles);
+    EXPECT_EQ(&context->getSettingsRef(), wrapper);
+    EXPECT_TRUE(context->getSettingsRef().sharesSnapshotWith(inherited));
+    EXPECT_FALSE(profiles->tryGetCachedSettings(inherited, true));
+    EXPECT_FALSE(profiles->tryGetCachedSettings(inherited, false));
+}
+
 /// Like the allocation-interceptor tests, this requires tracked `new` and `delete`.
 #if !defined(SANITIZER)
+GTEST_TEST(SettingsSnapshot, FailedCachedProfileCopyPreservesContext)
+{
+    auto global_context = getMutableContext().context;
+    SettingsProfilesInfo profile(global_context->getAccessControl());
+    Settings inherited;
+    constexpr size_t payload_size = 2 * 1024 * 1024;
+    const auto type = global_context->getApplicationType();
+    const bool sanity_clamp = type == Context::ApplicationType::LOCAL || type == Context::ApplicationType::SERVER;
+    {
+        MemoryTrackerBlockerInThread guard;
+        Settings resolved(inherited);
+        resolved.setCustom("custom_snapshot", String(payload_size, 'p'));
+        profile.cacheSettings(inherited, resolved, sanity_clamp);
+    }
+
+    MemoryTracker query_tracker(&total_memory_tracker, VariableContext::Process, false);
+    std::thread(
+        [&]
+        {
+            ThreadStatus thread_status;
+            thread_status.memory_tracker.setParent(&query_tracker);
+            thread_status.untracked_memory_limit = 0;
+            auto context = Context::createCopy(global_context);
+            context->setSettings(inherited);
+            const auto previous_profiles = context->getSettingsConstraintsAndCurrentProfiles();
+            const auto * wrapper = &context->getSettingsRef();
+            const auto previous_throw_threshold = CurrentMemoryTracker::getMinAllocationSizeBytesToThrow();
+            SCOPE_EXIT({ CurrentMemoryTracker::setMinAllocationSizeBytesToThrow(previous_throw_threshold); });
+            CurrentMemoryTracker::setMinAllocationSizeBytesToThrow(payload_size / 2);
+            query_tracker.setHardLimit(query_tracker.get() + payload_size / 2);
+            int exception_code = 0;
+            try
+            {
+                context->setCurrentProfiles(profile, /*check_constraints=*/ false);
+            }
+            catch (const Exception & exception)
+            {
+                exception_code = exception.code();
+            }
+            query_tracker.setHardLimit(0);
+            EXPECT_EQ(exception_code, ErrorCodes::MEMORY_LIMIT_EXCEEDED);
+            EXPECT_EQ(context->getSettingsConstraintsAndCurrentProfiles(), previous_profiles);
+            EXPECT_EQ(&context->getSettingsRef(), wrapper);
+            EXPECT_TRUE(context->getSettingsRef().sharesSnapshotWith(inherited));
+
+            /// A retry can use the same cache entry once the query can afford its own copy.
+            context->setCurrentProfiles(profile, /*check_constraints=*/ false);
+            EXPECT_EQ(&context->getSettingsRef(), wrapper);
+            EXPECT_EQ(context->getSettingsRef().get("custom_snapshot"), Field(String(payload_size, 'p')));
+            EXPECT_TRUE(profile.tryGetCachedSettings(inherited, sanity_clamp));
+        })
+        .join();
+}
+
 GTEST_TEST(SettingsSnapshot, CachedStorageAndQueryWritesUseSeparateMemoryDomains)
 {
     /// Use the same real tracker hierarchy as the allocation-interceptor tests.

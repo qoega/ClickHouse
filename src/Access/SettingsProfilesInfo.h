@@ -46,7 +46,7 @@ struct SettingsProfilesInfo
 
     /// One resolved login snapshot per immutable profile generation, keyed by its inherited input.
     std::shared_ptr<const Settings> tryGetCachedSettings(const Settings & input, bool sanity_clamp) const;
-    void cacheSettings(const Settings & input, const Settings & output, bool sanity_clamp) const;
+    std::shared_ptr<const Settings> cacheSettings(const Settings & input, const Settings & output, bool sanity_clamp) const;
 
 private:
     struct CachedSettings;
