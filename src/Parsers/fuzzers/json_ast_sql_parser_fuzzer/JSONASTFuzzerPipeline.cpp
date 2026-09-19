@@ -77,18 +77,18 @@ bool isExpectedException(Stage stage, int code)
     {
         case Stage::JSON_TO_AST:
             /// `readJSON` implementations reject malformed documents with `BAD_ARGUMENTS`; the AST
-            /// limits throw `TOO_DEEP_AST`/`TOO_BIG_AST`. `Literal` payloads go through
-            /// `Field::restoreFromDump` and `parseFromString<UUID>`, which have their own codes.
+            /// limits throw `TOO_DEEP_AST`/`TOO_BIG_AST`. `Literal` payloads of the dump-encoded
+            /// types (`UUID`, `IPv4`, `Decimal*`, `Int128`, ...) go through `Field::restoreFromDump`,
+            /// whose text readers throw the `CANNOT_PARSE_*` family (quoted string, number, UUID, ...).
             return code == ErrorCodes::BAD_ARGUMENTS
                 || code == ErrorCodes::TOO_DEEP_AST
                 || code == ErrorCodes::TOO_BIG_AST
                 || code == ErrorCodes::CANNOT_RESTORE_FROM_FIELD_DUMP
-                || code == ErrorCodes::CANNOT_PARSE_UUID
-                || code == ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED
                 || code == ErrorCodes::ATTEMPT_TO_READ_AFTER_EOF
                 || code == ErrorCodes::DECIMAL_OVERFLOW
                 || code == ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT
-                || code == ErrorCodes::NOT_IMPLEMENTED;
+                || code == ErrorCodes::NOT_IMPLEMENTED
+                || std::string_view(ErrorCodes::getName(code)).starts_with("CANNOT_PARSE_");
         case Stage::FORMAT:
             /// Formatting code validates a few parser-impossible shapes itself.
             return code == ErrorCodes::BAD_ARGUMENTS
