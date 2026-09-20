@@ -304,6 +304,8 @@ bool isDeterministicForOracle(const std::string & sql_original)
         /// The planner may fold `ignore(...)` to 0 without evaluating a throwing argument; with the plan
         /// optimizations off the argument is evaluated. The result is a constant either way.
         "ignore(",
+        /// Random by design, and expensive enough under sanitizers to time out when run five times.
+        "fuzzquery", "fuzzjson",
     };
     for (const char * f : forbidden)
         if (sql.find(f) != std::string::npos)
