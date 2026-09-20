@@ -3719,7 +3719,16 @@ ColumnPtr executeStringInteger(const ColumnsWithTypeAndName & arguments, const A
                     {
                         auto & b = static_cast<llvm::IRBuilder<> &>(builder);
                         auto * lval = nativeCast(b, arguments[0], result_type);
-                        auto * rval = nativeCast(b, arguments[1], result_type);
+                        llvm::Value * rval = nullptr;
+                        if constexpr (requires { OpSpec::is_bit_shift; })
+                        {
+                            /// The shift amount keeps its value: cast to the (narrower) result type it would be
+                            /// truncated, and `bitShiftRight(x_UInt8, 256)` would become a shift by 0 instead of 0.
+                            /// The shift implementations compare it against the bit width themselves.
+                            rval = nativeCast(b, arguments[1], std::make_shared<DataTypeUInt64>());
+                        }
+                        else
+                            rval = nativeCast(b, arguments[1], result_type);
                         result = OpSpec::compile(b, lval, rval, is_signed_v<typename ResultDataType::FieldType>);
                         return true;
                     }

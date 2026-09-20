@@ -154,12 +154,20 @@ struct BitShiftLeftImpl
 
 #if USE_EMBEDDED_COMPILER
     static constexpr bool compilable = true;
+    static constexpr bool is_bit_shift = true;
 
+    /// `right` is the shift amount as UInt64 (see `FunctionBinaryArithmetic::compileImpl`). LLVM's `shl` by an
+    /// amount >= the bit width is poison, and a fused expression such as `bitAnd(bitShiftRight(x, 63), 1) = 0`
+    /// was folded to a wrong constant; the interpreter returns 0 for such amounts, do the same.
     static llvm::Value * compile(llvm::IRBuilder<> & b, llvm::Value * left, llvm::Value * right, bool)
     {
         if (!left->getType()->isIntegerTy())
             throw Exception(ErrorCodes::LOGICAL_ERROR, "BitShiftLeftImpl expected an integral type");
-        return b.CreateShl(left, right);
+        auto * type = left->getType();
+        const unsigned width = type->getIntegerBitWidth();
+        auto * too_large = b.CreateICmpUGE(right, llvm::ConstantInt::get(right->getType(), width));
+        auto * amount = b.CreateZExtOrTrunc(b.CreateSelect(too_large, llvm::ConstantInt::get(right->getType(), 0), right), type);
+        return b.CreateSelect(too_large, llvm::ConstantInt::get(type, 0), b.CreateShl(left, amount));
     }
 #endif
 };
