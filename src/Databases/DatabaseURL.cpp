@@ -309,14 +309,17 @@ bool DatabaseURL::checkFileURLExists(const String & url, ContextPtr context_, bo
     if (!isFileReadGranted(context_))
         return true;
 
-    if (!fs::exists(path))
+    /// The non-throwing overloads: a name that is not a valid path (e.g. longer than `NAME_MAX`) is a table
+    /// that does not exist, not a `std::filesystem_error` escaping the table lookup.
+    std::error_code ec;
+    if (!fs::exists(path, ec))
     {
         if (throw_on_error)
-            throw Exception(ErrorCodes::FILE_DOESNT_EXIST, "File does not exist: {}", path);
+            throw Exception(ErrorCodes::FILE_DOESNT_EXIST, "File does not exist: {}{}", path, ec ? " (" + ec.message() + ")" : "");
         return false;
     }
 
-    if (!fs::is_regular_file(path))
+    if (!fs::is_regular_file(path, ec))
     {
         if (throw_on_error)
             throw Exception(ErrorCodes::FILE_DOESNT_EXIST, "File is directory, but expected a file: {}", path);
