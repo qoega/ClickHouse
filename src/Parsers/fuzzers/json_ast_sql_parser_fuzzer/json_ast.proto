@@ -210,6 +210,9 @@ enum NodeType
     T_TableOverrideList = 91 [(json_text) = "TableOverrideList"];
     T_ForeignKeyDeclaration = 92 [(json_text) = "ForeignKeyDeclaration"];
     T_IdentifierTypePair = 93 [(json_text) = "IdentifierTypePair"];
+    T_DescribeQuery = 94 [(json_text) = "DescribeQuery"];
+    T_ObjectTypeArgument = 95 [(json_text) = "ObjectTypeArgument"];
+    T_ObjectTypedPathArgument = 96 [(json_text) = "ObjectTypedPathArgument"];
 }
 
 // `field_type` names (`Field::getTypeName`).
@@ -648,6 +651,11 @@ enum Key
     K_with_settings = 400;
     K_with_tables = 401;
     K_zk_name = 402;
+    K_path_with_type = 403;
+    K_skip_path = 404;
+    K_skip_path_regexp = 405;
+    K_path = 406;
+    K_parameter = 407;
 }
 
 // String constants accepted by `readJSON` implementations for enumeration-like
