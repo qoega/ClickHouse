@@ -79,6 +79,7 @@
 #include <iterator>
 #include <optional>
 #include <random>
+#include <algorithm>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -190,6 +191,160 @@ Verdict classify(const DB::IAST & ast)
 constexpr size_t cleanup_every = 200;
 size_t modifying_since_cleanup = 0;
 size_t executed_modifying = 0;
+size_t executed_with_random_settings = 0;
+
+/// Settings that select a different execution path without changing what a correct result is. Every second
+/// read-only statement without its own SETTINGS clause is executed with one to four of them appended, chosen
+/// deterministically from the statement text, so that the same corpus input always takes the same path and a
+/// failure reproduces. Limits and timeouts are deliberately absent (see `overridesResourceLimits`).
+struct RandomSetting
+{
+    const char * name;
+    std::vector<const char *> values;
+};
+const std::vector<RandomSetting> random_settings = {
+    {"max_threads", {"1", "2", "8"}},
+    {"max_block_size", {"1", "7", "64", "65409"}},
+    {"max_insert_block_size", {"1", "8"}},
+    {"min_insert_block_size_rows", {"1", "8"}},
+    {"join_algorithm", {"'hash'", "'parallel_hash'", "'grace_hash'", "'partial_merge'", "'full_sorting_merge'", "'direct,hash'", "'auto'", "'default'"}},
+    {"join_use_nulls", {"0", "1"}},
+    {"group_by_two_level_threshold", {"1"}},
+    {"group_by_two_level_threshold_bytes", {"1"}},
+    {"distributed_aggregation_memory_efficient", {"0", "1"}},
+    {"enable_memory_bound_merging_of_aggregation_results", {"0", "1"}},
+    {"optimize_aggregation_in_order", {"0", "1"}},
+    {"optimize_read_in_order", {"0", "1"}},
+    {"optimize_read_in_window_order", {"0", "1"}},
+    {"optimize_move_to_prewhere", {"0", "1"}},
+    {"optimize_move_to_prewhere_if_final", {"0", "1"}},
+    {"compile_expressions", {"0", "1"}},
+    {"min_count_to_compile_expression", {"0"}},
+    {"compile_aggregate_expressions", {"0", "1"}},
+    {"min_count_to_compile_aggregate_expression", {"0"}},
+    {"compile_sort_description", {"0", "1"}},
+    {"min_count_to_compile_sort_description", {"0"}},
+    {"query_plan_enable_optimizations", {"0", "1"}},
+    {"query_plan_filter_push_down", {"0", "1"}},
+    {"query_plan_optimize_prewhere", {"0", "1"}},
+    {"query_plan_merge_expressions", {"0", "1"}},
+    {"query_plan_join_swap_table", {"'auto'", "'false'", "'true'"}},
+    {"query_plan_use_new_logical_join_step", {"0", "1"}},
+    {"query_plan_convert_join_to_in", {"0", "1"}},
+    {"query_plan_optimize_lazy_materialization", {"0", "1"}},
+    {"query_plan_remove_redundant_sorting", {"0", "1"}},
+    {"query_plan_remove_redundant_distinct", {"0", "1"}},
+    {"query_plan_split_filter", {"0", "1"}},
+    {"optimize_functions_to_subcolumns", {"0", "1"}},
+    {"optimize_trivial_count_query", {"0", "1"}},
+    {"optimize_use_projections", {"0", "1"}},
+    {"optimize_use_implicit_projections", {"0", "1"}},
+    {"use_skip_indexes", {"0", "1"}},
+    {"use_query_condition_cache", {"0", "1"}},
+    {"use_query_cache", {"0", "1"}},
+    {"enable_optimize_predicate_expression", {"0", "1"}},
+    {"optimize_or_like_chain", {"0", "1"}},
+    {"optimize_if_chain_to_multiif", {"0", "1"}},
+    {"optimize_multiif_to_if", {"0", "1"}},
+    {"optimize_rewrite_sum_if_to_count_if", {"0", "1"}},
+    {"optimize_rewrite_aggregate_function_with_if", {"0", "1"}},
+    {"optimize_arithmetic_operations_in_aggregate_functions", {"0", "1"}},
+    {"optimize_injective_functions_inside_uniq", {"0", "1"}},
+    {"optimize_group_by_function_keys", {"0", "1"}},
+    {"optimize_group_by_constant_keys", {"0", "1"}},
+    {"optimize_redundant_functions_in_order_by", {"0", "1"}},
+    {"optimize_distinct_in_order", {"0", "1"}},
+    {"optimize_sorting_by_input_stream_properties", {"0", "1"}},
+    {"optimize_syntax_fuse_functions", {"0", "1"}},
+    {"optimize_uniq_to_count", {"0", "1"}},
+    {"optimize_extract_common_expressions", {"0", "1"}},
+    {"optimize_and_compare_chain", {"0", "1"}},
+    {"optimize_min_equality_disjunction_chain_length", {"1", "3"}},
+    {"optimize_substitute_columns", {"0", "1"}},
+    {"optimize_append_index", {"0", "1"}},
+    {"convert_query_to_cnf", {"0", "1"}},
+    {"short_circuit_function_evaluation", {"'enable'", "'force_enable'", "'disable'"}},
+    {"aggregate_functions_null_for_empty", {"0", "1"}},
+    {"transform_null_in", {"0", "1"}},
+    {"group_by_use_nulls", {"0", "1"}},
+    {"enable_positional_arguments", {"0", "1"}},
+    {"prefer_column_name_to_alias", {"0", "1"}},
+    {"cast_keep_nullable", {"0", "1"}},
+    {"decimal_check_overflow", {"0", "1"}},
+    {"totals_mode", {"'before_having'", "'after_having_exclusive'", "'after_having_inclusive'", "'after_having_auto'"}},
+    {"extremes", {"0", "1"}},
+    {"max_rows_in_set_to_optimize_join", {"0", "1000"}},
+    {"use_uncompressed_cache", {"0", "1"}},
+    {"merge_tree_min_rows_for_concurrent_read", {"1", "100"}},
+    {"merge_tree_min_bytes_for_concurrent_read", {"1"}},
+    {"merge_tree_coarse_index_granularity", {"2", "8"}},
+    {"merge_tree_use_v1_object_and_dynamic_serialization", {"0", "1"}},
+    {"max_streams_to_max_threads_ratio", {"1", "4"}},
+    {"max_read_buffer_size", {"1024", "1048576"}},
+    {"min_bytes_to_use_direct_io", {"1"}},
+    {"local_filesystem_read_method", {"'pread'", "'mmap'", "'pread_threadpool'"}},
+    {"allow_asynchronous_read_from_io_pool_for_merge_tree", {"0", "1"}},
+    {"parallel_view_processing", {"0", "1"}},
+    {"lightweight_deletes_sync", {"0", "2"}},
+    {"mutations_sync", {"0", "2"}},
+    {"read_in_order_two_level_merge_threshold", {"0", "1"}},
+    {"optimize_skip_merged_partitions", {"0", "1"}},
+    {"allow_experimental_lightweight_update", {"1"}},
+    {"analyzer_compatibility_join_using_top_level_identifier", {"0", "1"}},
+    {"any_join_distinct_right_table_keys", {"0", "1"}},
+    {"partial_merge_join_optimizations", {"0", "1"}},
+    {"partial_merge_join_left_table_buffer_bytes", {"0", "1024"}},
+    {"join_on_disk_max_files_to_merge", {"2", "64"}},
+    {"cross_join_min_rows_to_compress", {"1", "10000000"}},
+    {"parallel_hash_join_threshold", {"0", "100000"}},
+    {"prefer_external_sort_block_bytes", {"1", "16744704"}},
+    {"aggregation_in_order_max_block_bytes", {"1", "50000000"}},
+    {"aggregation_memory_efficient_merge_threads", {"1", "4"}},
+    {"deduplicate_blocks_in_dependent_materialized_views", {"0", "1"}},
+    {"insert_deduplicate", {"0", "1"}},
+    {"async_insert", {"0", "1"}},
+    {"optimize_on_insert", {"0", "1"}},
+    {"apply_mutations_on_fly", {"0", "1"}},
+    {"apply_patch_parts", {"0", "1"}},
+    {"enable_lazy_materialization", {"0", "1"}},
+    {"query_plan_join_shard_by_pk_ranges", {"0", "1"}},
+    {"allow_experimental_join_right_table_sorting", {"0", "1"}},
+    {"join_to_sort_minimum_perkey_rows", {"0", "40"}},
+    {"final", {"0", "1"}},
+};
+
+/// Appends a random `SETTINGS` clause to a read-only statement (see `random_settings`), or returns it unchanged.
+std::string withRandomSettings(const std::string & sql)
+{
+    std::string lower = sql;
+    for (char & c : lower)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (lower.find(" settings ") != std::string::npos || lower.find(" format ") != std::string::npos
+        || lower.find("into outfile") != std::string::npos)
+        return sql;
+
+    std::mt19937_64 rng(sipHash64(sql.data(), sql.size()));
+    if (rng() % 2 == 0)
+        return sql;
+    const size_t count = 1 + rng() % 4;
+    std::vector<size_t> chosen;
+    std::string result = sql + " SETTINGS ";
+    for (size_t i = 0; i < count; ++i)
+    {
+        size_t index = rng() % random_settings.size();
+        if (std::find(chosen.begin(), chosen.end(), index) != chosen.end())
+            continue;
+        chosen.push_back(index);
+        const auto & setting = random_settings[index];
+        if (chosen.size() > 1)
+            result += ", ";
+        result += setting.name;
+        result += " = ";
+        result += setting.values[rng() % setting.values.size()];
+    }
+    ++executed_with_random_settings;
+    return result;
+}
 
 std::vector<std::string> runNamesQuery(DB::ContextMutablePtr session_context, const std::string & sql)
 {
@@ -556,6 +711,8 @@ void printOracleStats()
             << " (see " << oracle_log_path << ")\n";
     if (executed_modifying)
         std::cerr << "json_ast_sql_execution_fuzzer: executed " << executed_modifying << " statements that create or change objects\n";
+    if (executed_with_random_settings)
+        std::cerr << "json_ast_sql_execution_fuzzer: executed " << executed_with_random_settings << " read-only statements with a random SETTINGS clause\n";
 }
 
 /// ClickHouse installs its own fatal signal handler inside `clickhouse local`, which replaces libFuzzer's,
@@ -838,7 +995,21 @@ DEFINE_BINARY_PROTO_FUZZER(const json_ast_fuzzer::Node & original_root)
     }
     ++stats.executed;
     recordLastInput(input);
-    DB::LocalFuzzerRunner::runQuery(input.sql);
+    if (verdict == Verdict::READ_ONLY)
+    {
+        /// The oracle below compares the plain statement across its own setting variants; the main execution
+        /// takes a random path so that the corpus exercises more of the planner and the executors.
+        const std::string sql_with_settings = withRandomSettings(input.sql);
+        if (sql_with_settings.size() != input.sql.size())
+        {
+            DB::JSONASTFuzzer::PipelineInput augmented = input;
+            augmented.sql = sql_with_settings;
+            recordLastInput(augmented);
+        }
+        DB::LocalFuzzerRunner::runQuery(sql_with_settings);
+    }
+    else
+        DB::LocalFuzzerRunner::runQuery(input.sql);
     if (verdict == Verdict::MODIFYING)
     {
         ++executed_modifying;

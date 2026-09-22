@@ -287,6 +287,11 @@ Which statements run is decided by `classify` in the target: read-only statement
 of a protected database and `INTO OUTFILE` never. After every 200 modifying statements the fuzzer
 drops every table, database and SQL function it created, so the fixture is the only long-lived state.
 
+Every second read-only statement without its own `SETTINGS` clause is executed with one to four settings
+appended from a curated list (`random_settings` in the source: threads, block sizes, join algorithms, JIT,
+planner optimizations, aggregation and sorting spilling, read methods, ...), chosen deterministically from the
+statement text so that an input always takes the same path. The list contains no limits or timeouts.
+
 Deterministic `SELECT`s additionally go through a differential oracle: the query is executed with
 the default plan, with the planner optimizations off and one-row blocks, with eight threads, tiny
 blocks, two-level and external aggregation and sorting and the other join algorithms, and with the
