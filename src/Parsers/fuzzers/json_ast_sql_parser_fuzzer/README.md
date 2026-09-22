@@ -65,7 +65,9 @@ through the JSON *writer* side, which the generator itself never exercises (it o
 `clone` must format identically, `getTreeHash` must not throw, `IAST::writeJSON` output must be
 accepted by `IAST::createFromJSON` and format to the same SQL. Nodes without a writer count as
 `JSON writer not supported`; a rejected or SQL-changing round trip is a statistic in the default
-mode and a finding with `JSON_AST_FUZZER_STRICT=json` (or `=1`). Finding 25 (a `Float64` literal
+mode and a finding with `JSON_AST_FUZZER_STRICT=json` (or `=1`); `JSON_AST_FUZZER_JSON_LOG=<file>`
+appends every such case (message, JSON, SQL) to the file instead of stopping, which harvests all of
+them from a corpus in one `-runs=0` pass. Finding 25 (a `Float64` literal
 written as an integer beyond 64 bits) is the kind of defect this stage detects.
 
 ## How the protobuf mutation works {#how-the-protobuf-mutation-works}

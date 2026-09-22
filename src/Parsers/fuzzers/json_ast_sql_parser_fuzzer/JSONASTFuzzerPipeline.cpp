@@ -51,6 +51,8 @@ bool strict_mode = false;
 bool strict_reparse_mode = false; /// abort only when the formatted SQL does not parse back
 bool strict_json_mode = false;    /// abort when the JSON writer's output is rejected or changes the SQL
 std::string last_tolerated_exception; /// message of the last exception `runStage` classified as expected
+std::unique_ptr<std::ofstream> json_findings_log; /// `JSON_AST_FUZZER_JSON_LOG`: collect JSON round-trip defects instead of aborting
+
 bool print_stats = true;
 std::unique_ptr<std::ostream> dump_file;
 std::ostream * dump_stream = nullptr;
@@ -279,6 +281,15 @@ void initializePipeline(std::string_view name, const int * argc, char *** argv)
     }
     if (const char * value = getenv("JSON_AST_FUZZER_STATS"))
         print_stats = std::string_view(value) != "0";
+    if (const char * value = getenv("JSON_AST_FUZZER_JSON_LOG"); value && *value)
+    {
+        json_findings_log = std::make_unique<std::ofstream>(value, std::ios::app);
+        if (!*json_findings_log)
+        {
+            std::cerr << "Cannot open JSON_AST_FUZZER_JSON_LOG file " << value << '\n';
+            exit(1);
+        }
+    }
     if (const char * value = getenv("JSON_AST_FUZZER_DUMP"); value && *value)
     {
         std::string_view target(value);
@@ -327,6 +338,21 @@ void abortWithReport(std::string_view reason, const PipelineInput & input)
     /// `abort` bypasses the `atexit` handler.
     printStats();
     abort();
+}
+
+/// A JSON round-trip defect is either appended to the findings log (harvest mode), or aborts in strict json
+/// mode, or is only counted.
+static void reportJSONRoundTrip(const std::string & reason, const PipelineInput & input)
+{
+    if (json_findings_log)
+    {
+        *json_findings_log << "=== " << reason << '\n';
+        dump(input, *json_findings_log);
+        *json_findings_log << std::endl;
+        return;
+    }
+    if (strict_json_mode)
+        abortWithReport("strict mode: " + reason, input);
 }
 
 ASTPtr generateSQL(const json_ast_fuzzer::Node & root, PipelineInput & input)
@@ -457,22 +483,20 @@ void parseAndRoundTrip(PipelineInput & input)
     if (!read)
     {
         ++stats.json_roundtrip_rejected;
-        if (strict_json_mode)
-            abortWithReport(
-                "strict mode: IAST::createFromJSON rejected the output of IAST::writeJSON: " + last_tolerated_exception
-                    + "\n--- JSON written ---\n" + written_json,
-                input);
+        reportJSONRoundTrip(
+            "IAST::createFromJSON rejected the output of IAST::writeJSON: " + last_tolerated_exception + "\n--- JSON written ---\n"
+                + written_json,
+            input);
         return;
     }
     const std::string parsed_sql_without_parens = parsed->formatIgnoringRedundantParentheses();
     if (json_sql != parsed_sql_without_parens)
     {
         ++stats.json_roundtrip_unstable;
-        if (strict_json_mode)
-            abortWithReport(
-                "strict mode: the JSON round trip changed the SQL from: " + parsed_sql_without_parens + "\nto: " + json_sql
-                    + "\n--- JSON written ---\n" + written_json,
-                input);
+        reportJSONRoundTrip(
+            "the JSON round trip changed the SQL from: " + parsed_sql_without_parens + "\nto: " + json_sql + "\n--- JSON written ---\n"
+                + written_json,
+            input);
         return;
     }
     ++stats.json_roundtrip_ok;
