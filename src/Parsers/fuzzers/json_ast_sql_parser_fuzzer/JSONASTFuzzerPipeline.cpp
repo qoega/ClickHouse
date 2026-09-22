@@ -3,6 +3,7 @@
 
 #include <Common/ErrorCodes.h>
 #include <Common/Exception.h>
+#include <IO/WriteBufferFromString.h>
 #include <Parsers/IAST.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/parseQuery.h>
@@ -48,6 +49,8 @@ std::string target_name = "json_ast_fuzzer";
 
 bool strict_mode = false;
 bool strict_reparse_mode = false; /// abort only when the formatted SQL does not parse back
+bool strict_json_mode = false;    /// abort when the JSON writer's output is rejected or changes the SQL
+std::string last_tolerated_exception; /// message of the last exception `runStage` classified as expected
 bool print_stats = true;
 std::unique_ptr<std::ostream> dump_file;
 std::ostream * dump_stream = nullptr;
@@ -58,6 +61,9 @@ enum class Stage
     FORMAT,
     PARSE,
     REPARSE,
+    AST_UTILITIES,
+    JSON_WRITE,
+    JSON_READ,
 };
 
 std::string_view stageName(Stage stage)
@@ -68,6 +74,9 @@ std::string_view stageName(Stage stage)
         case Stage::FORMAT: return "formatting the AST built from JSON";
         case Stage::PARSE: return "parsing the generated SQL";
         case Stage::REPARSE: return "re-parsing the formatted SQL";
+        case Stage::AST_UTILITIES: return "cloning and hashing the parsed AST";
+        case Stage::JSON_WRITE: return "IAST::writeJSON of the parsed AST";
+        case Stage::JSON_READ: return "IAST::createFromJSON of the writer's own output";
     }
 }
 
@@ -118,6 +127,22 @@ bool isExpectedException(Stage stage, int code)
                 || code == ErrorCodes::TOP_AND_LIMIT_TOGETHER
                 || code == ErrorCodes::OFFSET_FETCH_WITHOUT_ORDER_BY
                 || code == ErrorCodes::FIRST_AND_NEXT_TOGETHER;
+        case Stage::AST_UTILITIES:
+            /// `clone` and `getTreeHash` of an AST the parser produced may not throw.
+            return false;
+        case Stage::JSON_WRITE:
+            /// Nodes without a JSON writer (`IAST::writeJSON` default) and writers that refuse a shape.
+            return code == ErrorCodes::NOT_IMPLEMENTED
+                || code == ErrorCodes::BAD_ARGUMENTS;
+        case Stage::JSON_READ:
+            /// Reading the writer's own output must succeed; a tolerated code here is only a statistic
+            /// (`json_roundtrip_rejected`), promoted to a finding by `JSON_AST_FUZZER_STRICT=json`.
+            return code == ErrorCodes::BAD_ARGUMENTS
+                || code == ErrorCodes::NOT_IMPLEMENTED
+                || code == ErrorCodes::TOO_DEEP_AST
+                || code == ErrorCodes::TOO_BIG_AST
+                || code == ErrorCodes::CANNOT_RESTORE_FROM_FIELD_DUMP
+                || std::string_view(ErrorCodes::getName(code)).starts_with("CANNOT_PARSE_");
     }
 }
 
@@ -155,7 +180,12 @@ void printStats()
             << "  SQL parsed:                     " << stats.sql_parsed << " (" << percent(stats.sql_parsed, stats.inputs) << "%)\n"
             << "  format/parse round trip stable: " << stats.roundtrip_stable << " (" << percent(stats.roundtrip_stable, stats.sql_parsed) << "% of parsed)\n"
             << "  round trip unstable:            " << stats.roundtrip_unstable << '\n'
-            << "  re-parse rejected:              " << stats.roundtrip_reparse_rejected << '\n';
+            << "  re-parse rejected:              " << stats.roundtrip_reparse_rejected << '\n'
+            << "  clone unstable:                 " << stats.clone_unstable << '\n'
+            << "  JSON round trip stable:         " << stats.json_roundtrip_ok << " (" << percent(stats.json_roundtrip_ok, stats.sql_parsed) << "% of parsed)\n"
+            << "  JSON writer not supported:      " << stats.json_roundtrip_not_supported << '\n'
+            << "  JSON reader rejected writer:    " << stats.json_roundtrip_rejected << '\n'
+            << "  JSON round trip unstable:       " << stats.json_roundtrip_unstable << '\n';
     if (stats.executed || stats.execution_skipped)
         std::cerr
             << "  execution skipped (statement):  " << stats.execution_skipped << '\n'
@@ -176,7 +206,10 @@ bool runStage(Stage stage, const PipelineInput & input, Action && action)
     catch (const Exception & e)
     {
         if (isExpectedException(stage, e.code()))
+        {
+            last_tolerated_exception = getExceptionMessage(e, /*with_stacktrace=*/ false);
             return false;
+        }
         abortWithReport(
             "unexpected exception while " + std::string(stageName(stage)) + ": " + getExceptionMessage(e, /*with_stacktrace=*/ true),
             input);
@@ -242,6 +275,7 @@ void initializePipeline(std::string_view name, const int * argc, char *** argv)
     {
         strict_mode = std::string_view(value) == "1";
         strict_reparse_mode = strict_mode || std::string_view(value) == "reparse";
+        strict_json_mode = strict_mode || std::string_view(value) == "json";
     }
     if (const char * value = getenv("JSON_AST_FUZZER_STATS"))
         print_stats = std::string_view(value) != "0";
@@ -380,6 +414,68 @@ void parseAndRoundTrip(PipelineInput & input)
     }
 
     dumpSection("SQL after parse and format", input.reformatted_sql);
+
+    /// The AST utilities every interpreter relies on: `clone` must give a tree that formats the same,
+    /// `getTreeHash` (`updateTreeHashImpl` of every node) must not throw. Cheap, and otherwise never
+    /// reached by the parser fuzzer (the coverage of `updateTreeHashImpl` was zero).
+    std::string cloned_sql;
+    runStage(Stage::AST_UTILITIES, input, [&]
+    {
+        cloned_sql = parsed->clone()->formatWithSecretsOneLine();
+        parsed->getTreeHash(/*ignore_aliases=*/ false);
+        parsed->getTreeHash(/*ignore_aliases=*/ true);
+    });
+    if (cloned_sql != input.reformatted_sql)
+    {
+        ++stats.clone_unstable;
+        if (strict_mode)
+            abortWithReport("strict mode: the clone of the parsed AST formats differently: " + cloned_sql, input);
+    }
+
+    /// The JSON writer side (`parseQueryToJSON`): the fuzzer builds ASTs from JSON, so the writers are
+    /// only covered here. The reader must accept the writer's output and the SQL must survive.
+    std::string written_json;
+    bool written = runStage(Stage::JSON_WRITE, input, [&]
+    {
+        WriteBufferFromOwnString out;
+        parsed->writeJSON(out);
+        written_json = out.str();
+    });
+    if (!written)
+    {
+        ++stats.json_roundtrip_not_supported;
+        return;
+    }
+    /// The JSON has no representation of the redundant parentheses the user wrote (`IAST::isParenthesized`),
+    /// so both sides are compared without them.
+    std::string json_sql;
+    bool read = runStage(Stage::JSON_READ, input, [&]
+    {
+        ASTPtr from_json = IAST::createFromJSON(written_json, limits.max_ast_depth, limits.max_ast_elements);
+        json_sql = from_json->formatIgnoringRedundantParentheses();
+    });
+    if (!read)
+    {
+        ++stats.json_roundtrip_rejected;
+        if (strict_json_mode)
+            abortWithReport(
+                "strict mode: IAST::createFromJSON rejected the output of IAST::writeJSON: " + last_tolerated_exception
+                    + "\n--- JSON written ---\n" + written_json,
+                input);
+        return;
+    }
+    const std::string parsed_sql_without_parens = parsed->formatIgnoringRedundantParentheses();
+    if (json_sql != parsed_sql_without_parens)
+    {
+        ++stats.json_roundtrip_unstable;
+        if (strict_json_mode)
+            abortWithReport(
+                "strict mode: the JSON round trip changed the SQL from: " + parsed_sql_without_parens + "\nto: " + json_sql
+                    + "\n--- JSON written ---\n" + written_json,
+                input);
+        return;
+    }
+    ++stats.json_roundtrip_ok;
 }
 
 }

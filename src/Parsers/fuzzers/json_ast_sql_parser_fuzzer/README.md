@@ -60,6 +60,14 @@ cases, so the default mode does not stop on them. `JSON_AST_FUZZER_STRICT=repars
 second outcome (SQL the parser accepted but whose formatted form it rejects), which is rare (18 of
 434k inputs in a three-hour session) and the most likely to be a formatter bug.
 
+After the SQL round trip the parsed AST goes through the utilities every interpreter relies on and
+through the JSON *writer* side, which the generator itself never exercises (it only reads JSON):
+`clone` must format identically, `getTreeHash` must not throw, `IAST::writeJSON` output must be
+accepted by `IAST::createFromJSON` and format to the same SQL. Nodes without a writer count as
+`JSON writer not supported`; a rejected or SQL-changing round trip is a statistic in the default
+mode and a finding with `JSON_AST_FUZZER_STRICT=json` (or `=1`). Finding 25 (a `Float64` literal
+written as an integer beyond 64 bits) is the kind of defect this stage detects.
+
 ## How the protobuf mutation works {#how-the-protobuf-mutation-works}
 
 `json_ast.proto` mirrors the JSON AST representation generically rather than describing each of

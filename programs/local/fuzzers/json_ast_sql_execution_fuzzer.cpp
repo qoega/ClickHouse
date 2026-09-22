@@ -66,6 +66,9 @@
 #include <Common/SipHash.h>
 
 #include <libfuzzer/libfuzzer_macro.h>
+#include <iomanip>
+#include <map>
+#include <Common/ErrorCodes.h>
 #include <google/protobuf/descriptor.h>
 
 #include <json_ast.pb.h>
@@ -420,6 +423,11 @@ size_t oracle_runs = 0;
 size_t oracle_variants_skipped = 0; /// baseline hit a resource limit or was too slow for the variants
 size_t oracle_mismatches = 0;
 size_t oracle_error_asymmetries = 0;
+/// Quality of the generated statements: how many `SELECT`s run without an error in the default variant, and
+/// which errors the rest hit (an `UNKNOWN_IDENTIFIER`-heavy histogram means the mutator produces unresolvable
+/// names, a `TIMEOUT_EXCEEDED`-heavy one that it produces expensive queries).
+size_t oracle_baseline_ok = 0;
+std::map<int, size_t> oracle_baseline_errors;
 
 /// Functions and clauses whose result legitimately depends on the run: randomness, time, the
 /// environment, ordering-dependent aggregates, approximate algorithms, non-total-order `LIMIT`.
@@ -670,6 +678,10 @@ void runOracle(const std::string & sql, const std::string & json)
         worker.join();
     });
     ++oracle_runs;
+    if (results[0].ok)
+        ++oracle_baseline_ok;
+    else
+        ++oracle_baseline_errors[results[0].error_code];
     if (!variants_run)
         return;
 
@@ -709,6 +721,17 @@ void printOracleStats()
         std::cerr << "json_ast_sql_execution_fuzzer oracle: runs " << oracle_runs << " (variants skipped after a slow baseline: "
             << oracle_variants_skipped << "), mismatches " << oracle_mismatches << ", error asymmetries " << oracle_error_asymmetries
             << " (see " << oracle_log_path << ")\n";
+    if (oracle_runs)
+    {
+        std::cerr << "json_ast_sql_execution_fuzzer: SELECT statements without error in the default variant: " << oracle_baseline_ok
+            << " (" << (100.0 * static_cast<double>(oracle_baseline_ok) / static_cast<double>(oracle_runs)) << "%), most frequent errors:\n";
+        std::vector<std::pair<size_t, int>> by_count;
+        for (const auto & [code, count] : oracle_baseline_errors)
+            by_count.emplace_back(count, code);
+        std::sort(by_count.rbegin(), by_count.rend());
+        for (size_t i = 0; i < by_count.size() && i < 15; ++i)
+            std::cerr << "  " << std::setw(8) << by_count[i].first << "  " << by_count[i].second << " " << DB::ErrorCodes::getName(by_count[i].second) << '\n';
+    }
     if (executed_modifying)
         std::cerr << "json_ast_sql_execution_fuzzer: executed " << executed_modifying << " statements that create or change objects\n";
     if (executed_with_random_settings)

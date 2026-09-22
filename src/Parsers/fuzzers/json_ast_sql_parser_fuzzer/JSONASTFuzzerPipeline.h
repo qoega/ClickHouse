@@ -69,6 +69,11 @@ struct PipelineStats
     size_t roundtrip_stable = 0;       /// format(parse(sql)) == sql
     size_t roundtrip_unstable = 0;
     size_t roundtrip_reparse_rejected = 0;
+    size_t clone_unstable = 0;             /// format(clone(ast)) != format(ast)
+    size_t json_roundtrip_not_supported = 0; /// `writeJSON` has no implementation for a node of the parsed AST
+    size_t json_roundtrip_ok = 0;          /// format(readJSON(writeJSON(ast))) == format(ast)
+    size_t json_roundtrip_rejected = 0;    /// `readJSON` rejected the output of `writeJSON`
+    size_t json_roundtrip_unstable = 0;    /// the JSON round trip changed the formatted SQL
     size_t execution_skipped = 0;      /// statement kind not executed by the execution fuzzer
     size_t executed = 0;
 };
