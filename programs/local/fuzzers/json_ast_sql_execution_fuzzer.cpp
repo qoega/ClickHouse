@@ -661,7 +661,12 @@ void runOracle(const std::string & sql, const std::string & json)
     if (!oracle_enabled || !isDeterministicForOracle(sql))
         return;
 
-    static const std::string baseline_settings = "max_threads = 1, max_execution_time = 2, max_rows_to_read = 1000000";
+    /// `optimize_arithmetic_operations_in_aggregate_functions` (on by default) rewrites `min/max(x +/- c)` to
+    /// `min/max(x) +/- c`, which is wrong over an empty global aggregation (returns `c` instead of the default 0);
+    /// a real ClickHouse bug reported separately (finding 31). Disable it in the baseline so both oracle variants
+    /// agree on it and the differential oracle keeps hunting unknown divergences instead of re-flagging this one.
+    static const std::string baseline_settings = "max_threads = 1, max_execution_time = 2, max_rows_to_read = 1000000"
+        ", optimize_arithmetic_operations_in_aggregate_functions = 0";
     static const std::string flipped_settings = baseline_settings
         + ", max_block_size = 1, query_plan_enable_optimizations = 0, optimize_move_to_prewhere = 0, optimize_read_in_order = 0"
           ", optimize_aggregation_in_order = 0, optimize_distinct_in_order = 0, compile_expressions = 0, compile_aggregate_expressions = 0"
