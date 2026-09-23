@@ -690,7 +690,9 @@ void runOracle(const std::string & sql, const std::string & json)
         ", join_algorithm = 'grace_hash,partial_merge,hash', parallel_hash_join_threshold = 0, min_joined_block_size_bytes = 1"
         ", cross_join_min_rows_to_compress = 1, cross_join_min_bytes_to_compress = 1, max_streams_to_max_threads_ratio = 4"
         ", optimize_aggregators_of_group_by_keys = 0, optimize_group_by_constant_keys = 0, optimize_rewrite_array_exists_to_has = 0"
-        ", optimize_rewrite_regexp_functions = 0, query_plan_use_new_logical_join_step = 0, optimize_min_equality_disjunction_chain_length = 1";
+        ", optimize_rewrite_regexp_functions = 0, query_plan_use_new_logical_join_step = 0, optimize_min_equality_disjunction_chain_length = 1"
+        /// See the baseline: keep the buggy `min/max(x +/- c)` rewrite (finding 31) off in every variant so the oracle agrees.
+        ", optimize_arithmetic_operations_in_aggregate_functions = 0";
 
     /// Fourth variant: force the JIT compilation of expressions, aggregates and sort descriptions
     /// (the default only compiles after a few repetitions, so a single fuzzed query never does), with
