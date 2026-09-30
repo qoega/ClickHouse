@@ -723,7 +723,7 @@ void runOracle(const std::string & sql, const std::string & json)
     static const std::string jit_settings = baseline_settings
         + ", min_count_to_compile_expression = 0, min_count_to_compile_aggregate_expression = 0, min_count_to_compile_sort_description = 0"
           ", compile_expressions = 1, compile_aggregate_expressions = 1, compile_sort_description = 1"
-          ", short_circuit_function_evaluation = 'force_enable', query_plan_optimize_lazy_materialization = 0, max_block_size = 3";
+          ", query_plan_optimize_lazy_materialization = 0, max_block_size = 3";
 
     OracleResult results[4];
     bool variants_run = false;
