@@ -194,6 +194,11 @@ std::atomic<bool> dump_started{false};
 static void runnerStackTraceHandler(int /*sig*/, siginfo_t * /*info*/, void * /*context*/)
 {
     signalSafeWrite("[fuzzer] SIGUSR1 handler entered on runner thread\n");
+    /// Dump the statement the runner is stuck on so hangs (e.g. a cancellation that never joins a pipeline
+    /// thread) can be reproduced; the runner thread is blocked in this query, so `query` is not changing.
+    signalSafeWrite("[fuzzer] stuck query: ");
+    signalSafeWrite(query.c_str());
+    signalSafeWrite("\n");
     signalSafeWrite("\n=== Runner thread stack trace (where the query is stuck) ===\n");
     __sanitizer_print_stack_trace();
     signalSafeWrite("=== End runner thread stack trace ===\n\n");
