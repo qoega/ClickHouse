@@ -311,7 +311,7 @@ bool DatabaseURL::checkFileURLExists(const String & url, ContextPtr context_, bo
     if (!existsOrFileNameTooLong([&] { return fs::exists(path); }))
     {
         if (throw_on_error)
-            throw Exception(ErrorCodes::FILE_DOESNT_EXIST, "File does not exist: {}{}", path, ec ? " (" + ec.message() + ")" : "");
+            throw Exception(ErrorCodes::FILE_DOESNT_EXIST, "File does not exist: {}", path);
         return false;
     }
 

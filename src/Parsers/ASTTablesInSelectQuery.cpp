@@ -598,7 +598,7 @@ void ASTTableJoin::readJSON(const Poco::JSON::Object & json)
         children.push_back(using_expression_list);
     }
 
-    child = r.readExpressionChild("on_expression");
+    child = r.readExpressionNodeChild("on_expression");
     if (child)
     {
         on_expression = child;

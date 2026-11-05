@@ -169,9 +169,6 @@ struct BitShiftLeftImpl
     /// until the expression gets compiled and then silently returns a value.
     static constexpr bool compilable = !is_big_int_v<B> && is_unsigned_v<B>;
 
-    /// `right` is the shift amount as UInt64 (see `FunctionBinaryArithmetic::compileImpl`). LLVM's `shl` by an
-    /// amount >= the bit width is poison, and a fused expression such as `bitAnd(bitShiftRight(x, 63), 1) = 0`
-    /// was folded to a wrong constant; the interpreter returns 0 for such amounts, do the same.
     static llvm::Value * compile(llvm::IRBuilder<> & b, llvm::Value * left, llvm::Value * right, bool)
     {
         if (!left->getType()->isIntegerTy())
