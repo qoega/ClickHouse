@@ -101,6 +101,13 @@ it aside; if not, it's likely NEW — share it (minimized input + SQL + sanitize
 settings line) through the findings channel. Keep `KNOWN_FINDINGS.md` updated as you triage so dedup stays effective.
 Report "exception"/LOGICAL_ERROR as that, not "crash" (release does not crash on logical errors).
 
+Since 2026-11-05 the execution fuzzer writes `oracle_mismatches.log` and `json_ast_last_input.txt` under the
+libFuzzer `-artifact_prefix` when one is given (`run_round.sh` passes `-artifact_prefix=./` inside the session
+directory, so nothing moves for this harness); `JSON_AST_FUZZER_ORACLE_LOG` / `JSON_AST_FUZZER_LAST_INPUT` still
+override. The same binaries also run in ClickHouse CI (`NightlyFuzzers` workflow, see the README section
+"Continuous integration"), where the oracle log becomes a failing report row: a finding you see locally may show
+up there as well, so check the nightly report before filing.
+
 ## 8. Monitoring loop (run all day)
 
 Run `monitor_check_once.sh` on a schedule (e.g. every 2h). It prints only genuinely-new signals and is idempotent
