@@ -217,6 +217,9 @@ def run_fuzzer(fuzzer: str, timeout: int):
                                 # same limit as rss_limit_mb is applied.
         "only_ascii",           # If 1, generate only ASCII (isprint``+``isspace) inputs. Defaults to 0.
         "dict",                 # Provide a dictionary of input keywords, if absent fuzzer specific dictionary with name <fuzzer>.dict is used when present.
+        "detect_leaks",         # If 1, and if LeakSanitizer is enabled try to detect memory leaks during fuzzing (i.e. not only at shut down).
+                                # Targets that lazily initialize a library from an input (json_ast_sql_execution_fuzzer: the AWS SDK behind
+                                # the s3 table function) set 0; the end-of-process leak check of LeakSanitizer stays enabled.
     ]
 
     allowed_merge_libfuzzer_options = [

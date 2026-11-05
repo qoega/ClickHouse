@@ -478,9 +478,9 @@ void cleanupFuzzerObjects()
 /// ------------------------------------------------------------------------------------------------
 /// Differential oracle: a deterministic `SELECT` must give the same multiset of rows with the planner
 /// optimizations on and off. Both runs use one thread and the same session, so the comparison is exact.
-/// Mismatches are appended to `JSON_AST_FUZZER_ORACLE_LOG` (default `oracle_mismatches.log` in the
-/// working directory) together with the query, and counted; they do not stop the fuzzer.
-/// `JSON_AST_FUZZER_ORACLE=0` disables the oracle.
+/// Mismatches are appended to `JSON_AST_FUZZER_ORACLE_LOG` (default `oracle_mismatches.log` under the
+/// libFuzzer `-artifact_prefix`, see `LLVMFuzzerInitialize`) together with the query, and counted; they do
+/// not stop the fuzzer. `JSON_AST_FUZZER_ORACLE=0` disables the oracle.
 /// ------------------------------------------------------------------------------------------------
 
 bool oracle_enabled = true;
@@ -820,7 +820,7 @@ void printOracleStats()
 /// ClickHouse installs its own fatal signal handler inside `clickhouse local`, which replaces libFuzzer's,
 /// so an abort during query execution ends the process without a libFuzzer artifact. The JSON and the SQL
 /// of the input being executed are therefore written to `JSON_AST_FUZZER_LAST_INPUT` (default
-/// `json_ast_last_input.txt` in the working directory) right before every execution.
+/// `json_ast_last_input.txt` under the libFuzzer `-artifact_prefix`) right before every execution.
 std::string last_input_path = "json_ast_last_input.txt";
 
 void recordLastInput(const DB::JSONASTFuzzer::PipelineInput & input)
@@ -1051,6 +1051,23 @@ extern "C" int LLVMFuzzerInitialize(const int * argc, char *** argv)
     DB::LocalFuzzerRunner::initialize(argc, argv, loadSchema());
 
     DB::JSONASTFuzzer::initializePipeline("json_ast_sql_execution_fuzzer", argc, argv);
+
+    /// By default the oracle log and the last-input file go where libFuzzer writes its crash artifacts: in CI
+    /// (tests/fuzz/runner.py) that is the results directory collected into the report, while the working
+    /// directory holds the fuzzer binaries and is not. The environment variables below still override.
+    for (int i = 1; i < *argc; ++i)
+    {
+        std::string_view arg((*argv)[i]);
+        if (arg.starts_with("-ignore_remaining_args"))
+            break;
+        if (constexpr std::string_view option = "-artifact_prefix="; arg.starts_with(option))
+        {
+            const std::string artifact_prefix(arg.substr(option.size()));
+            oracle_log_path = artifact_prefix + oracle_log_path;
+            last_input_path = artifact_prefix + last_input_path;
+        }
+    }
+
     if (const char * value = getenv("JSON_AST_FUZZER_ORACLE"))
         oracle_enabled = std::string_view(value) != "0";
     if (const char * value = getenv("JSON_AST_FUZZER_ORACLE_LOG"); value && *value)

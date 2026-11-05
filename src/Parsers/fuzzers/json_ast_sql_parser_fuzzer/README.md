@@ -321,7 +321,9 @@ and network and S3 timeouts to `clickhouse local`, like `clickhouse_fuzzer`, and
 logging of fatal errors: `clickhouse local` installs its own fatal signal handler, which replaces
 libFuzzer's, so without it an abort inside a query would end the process silently. For the same
 reason the JSON and SQL of the input being executed are written to `json_ast_last_input.txt`
-(`JSON_AST_FUZZER_LAST_INPUT`) before every execution.
+(`JSON_AST_FUZZER_LAST_INPUT`) before every execution. That file and the oracle log
+`oracle_mismatches.log` (`JSON_AST_FUZZER_ORACLE_LOG`) are placed under the libFuzzer
+`-artifact_prefix` when one is given, next to the crash artifacts.
 
 ```bash
 ninja -C build_fuzz json_ast_sql_execution_fuzzer
@@ -366,3 +368,23 @@ $FUZZER -minimize_crash=1 -runs=100000 crash-<sha1>
 
 The CI runner (`tests/fuzz/runner.py`, job `libFuzzer tests`) performs the merge with the corpus
 stored in S3 before every fuzzing session and uploads the merged corpus afterwards.
+
+## Continuous integration {#continuous-integration}
+
+Both targets end in `_fuzzer`, so the `fuzzers` CMake target of the `Build (amd_fuzzers)` job
+(ASan, `ENABLE_FUZZING=1`, `ENABLE_PROTOBUF=1`) bundles them with the other libFuzzer targets, and
+the `NightlyFuzzers` workflow (`ci/workflows/nightly_fuzzers.py`, job `libFuzzer tests`,
+`ci/jobs/libfuzzer_test_check.py`) runs every bundled target for five hours each night; a separate
+scheduled job merges the corpora. Nothing is registered per target: the libFuzzer flags and the
+`clickhouse local` arguments of the execution fuzzer come from `tests/fuzz/<target>.options`, the
+seed corpus from `tests/fuzz/json_ast_sql_parser_fuzzer.in`, which `tests/fuzz/build.sh` packs as
+`<target>_seed_corpus.zip` for both targets, and the accumulated corpus lives in S3 under
+`fuzzer/corpus`.
+
+In the report each target has a row with libFuzzer's statistics and the `crash-*`, `timeout-*`,
+`slow-unit-*` and `oom-*` artifacts. The execution fuzzer adds `json_ast_last_input.txt` to a
+failed row (the input that was executing when the process ended through the fatal signal handler of
+`clickhouse local`) and a row `json_ast_sql_execution_fuzzer oracle` that fails when
+`oracle_mismatches.log` is not empty, with the log attached: every entry has the differing variant,
+the row counts and hashes, the SQL and the JSON AST, so it can be reproduced with `clickhouse local`
+after the fixture without the fuzzer binary.
