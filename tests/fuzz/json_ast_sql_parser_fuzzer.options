@@ -6,3 +6,4 @@ timeout = 60
 # JSON exceed the AST limits of the target.
 max_len = 65536
 rss_limit_mb = 8192
+use_value_profile = 1

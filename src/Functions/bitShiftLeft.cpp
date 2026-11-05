@@ -19,6 +19,17 @@ struct BitShiftLeftImpl
     using ResultType = typename NumberTraits::ResultOfBit<A, B>::Type;
     static const constexpr bool allow_fixed_string = false;
     static const constexpr bool allow_string_integer = true;
+    /// Documentation-only: the legacy validator stays authoritative, including
+    /// the `IPv4`/`IPv6` casts the DSL can't express yet; see `bitAnd.cpp`.
+    static constexpr auto signature_documentation =
+        /// Float arguments are rejected by the runtime (`valid_on_float_arguments=false`);
+        /// see the matching comment in `bitAnd.cpp`.
+        /// The String / FixedString shift path only supports native-width shift counts
+        /// (`IsIntegral`); big integers (`UInt128`/`Int256`/...) reach `executeImpl` but are
+        /// rejected there, so spell the count as `NativeInteger` (cf. `bitTest`).
+        "(A : Integer, B : Integer) -> nativeNumber(maxBits(A, B), anySigned(A, B), 0)"
+        " OR (String, NativeInteger) -> String"
+        " OR (F : FixedString, NativeInteger) -> F";
 
     template <typename Result = ResultType>
     static NO_SANITIZE_UNDEFINED Result apply(A a [[maybe_unused]], B b [[maybe_unused]])
@@ -153,8 +164,10 @@ struct BitShiftLeftImpl
     }
 
 #if USE_EMBEDDED_COMPILER
-    static constexpr bool compilable = true;
-    static constexpr bool is_bit_shift = true;
+    /// `apply` above refuses a big-integer shift amount and a negative one. The compiled body cannot
+    /// throw, so it must not answer for those at all: otherwise the same query raises an exception
+    /// until the expression gets compiled and then silently returns a value.
+    static constexpr bool compilable = !is_big_int_v<B> && is_unsigned_v<B>;
 
     /// `right` is the shift amount as UInt64 (see `FunctionBinaryArithmetic::compileImpl`). LLVM's `shl` by an
     /// amount >= the bit width is poison, and a fused expression such as `bitAnd(bitShiftRight(x, 63), 1) = 0`
@@ -163,11 +176,13 @@ struct BitShiftLeftImpl
     {
         if (!left->getType()->isIntegerTy())
             throw Exception(ErrorCodes::LOGICAL_ERROR, "BitShiftLeftImpl expected an integral type");
-        auto * type = left->getType();
-        const unsigned width = type->getIntegerBitWidth();
-        auto * too_large = b.CreateICmpUGE(right, llvm::ConstantInt::get(right->getType(), width));
-        auto * amount = b.CreateZExtOrTrunc(b.CreateSelect(too_large, llvm::ConstantInt::get(right->getType(), 0), right), type);
-        return b.CreateSelect(too_large, llvm::ConstantInt::get(type, 0), b.CreateShl(left, amount));
+
+        /// A shift by the width of the left operand or more answers zero above, while `shl` by such an
+        /// amount is poison. The width is that of the operand as declared: `compileImpl` has already
+        /// widened both values to the result type, while the interpreted path clamps at `8 * sizeof(A)`.
+        auto * width = llvm::ConstantInt::get(left->getType(), 8 * sizeof(A));
+        return b.CreateSelect(
+            b.CreateICmpULT(right, width), b.CreateShl(left, right), llvm::ConstantInt::get(left->getType(), 0));
     }
 #endif
 };

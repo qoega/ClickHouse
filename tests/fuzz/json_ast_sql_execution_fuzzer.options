@@ -4,10 +4,19 @@
 timeout = 60
 max_len = 65536
 rss_limit_mb = 8192
+use_value_profile = 1
 # One-time library initialization triggered by a query (e.g. the AWS SDK behind the `s3` table function) is
-# reported by libFuzzer's per-input leak check although it is not a leak; the end-of-process check of
-# LeakSanitizer stays enabled.
+# reported by libFuzzer's per-input leak check although it is not a leak, and the in-process `clickhouse local`
+# keeps caches between inputs anyway (see clickhouse_fuzzer.options). The CI run ends by a timeout that kills
+# the process, so the exit-time leak check does not run there either.
 detect_leaks = 0
+[asan]
+# libfuzzer enforces `malloc_limit_mb` (which defaults to `rss_limit_mb`) from the same malloc hook that it
+# installs only with `detect_leaks = 1`; keep the single-allocation limit with the equivalent AddressSanitizer
+# option, and make an oversized allocation a fatal report instead of a recoverable `CANNOT_ALLOCATE_MEMORY`
+# (`base/base/sanitizer_options.h` sets `allocator_may_return_null=1`), so that libfuzzer saves the reproducer.
+max_allocation_size_mb = 4096
+allocator_may_return_null = 0
 
 [fuzzer_arguments]
 --output-format=Null
