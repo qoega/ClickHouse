@@ -37,9 +37,6 @@ TIMEOUT_PR = 30 * 60  # 30 minutes for PR runs
 # fuzzing budget.
 TIMEOUT_MINIMIZATION = 60 * 60
 NO_CHANGES_MSG = "Nothing to run"
-# `format_fuzzer` instances fixed to one format by `FORMAT_NAME`, each with its own corpus,
-# so the inputs one reader accepts do not crowd out the others in a shared corpus.
-FORMAT_FUZZER_FORMATS = ("Parquet", "ORC", "Avro", "Arrow")
 RUNNER_OUTPUT = "/test_output"
 
 
@@ -51,19 +48,6 @@ def zipdir(path, ziph):
                 os.path.join(root, file),
                 file,
             )
-
-
-def add_format_fuzzer_instances(path: Path) -> None:
-    """Link `<format>_format_fuzzer` to `format_fuzzer`, with its options plus `FORMAT_NAME`."""
-    if not (path / "format_fuzzer").exists():
-        return
-    options_path = path / "format_fuzzer.options"
-    options = options_path.read_text() if options_path.exists() else ""
-    for format_name in FORMAT_FUZZER_FORMATS:
-        name = f"{format_name.lower()}_format_fuzzer"
-        (path / name).unlink(missing_ok=True)
-        (path / name).symlink_to("format_fuzzer")
-        (path / f"{name}.options").write_text(f"{options}\n[env]\nformat_name = {format_name}\n")
 
 
 def get_run_command(
@@ -487,10 +471,40 @@ def process_results(result_path: Path):
             log_files.append(str(file))
         for file in list(fuzzer_result_dir.glob("oom-*")):
             log_files.append(str(file))
+        # json_ast_sql_execution_fuzzer runs SQL inside an in-process `clickhouse local`, whose fatal
+        # signal handler replaces the one of libFuzzer: an abort during a query leaves no crash-* artifact,
+        # only this file with the JSON AST and the SQL of the input that was executing.
+        last_input = fuzzer_result_dir / "json_ast_last_input.txt"
+        if status[0] != "OK" and last_input.exists():
+            log_files.append(str(last_input))
 
         result.set_info("\n".join(raw_logs))
         result.set_files(log_files)
         test_results.append(result)
+
+        # The differential oracle of json_ast_sql_execution_fuzzer appends every SELECT whose result
+        # differs between the planner settings it compares (and every error only one side raises) to
+        # this file, with the query. libFuzzer knows nothing about these wrong-result findings, so they
+        # get a row of their own; the fuzzing row above stays OK when no crash occurred.
+        oracle_log = fuzzer_result_dir / "oracle_mismatches.log"
+        if oracle_log.exists() and oracle_log.stat().st_size > 0:
+            mismatches = 0
+            asymmetries = 0
+            with open(oracle_log, "r", encoding="utf-8", errors="replace") as file:
+                for line in file:
+                    if line.startswith("=== ORACLE MISMATCH"):
+                        mismatches += 1
+                    elif line.startswith("=== ORACLE ERROR ASYMMETRY"):
+                        asymmetries += 1
+            fails += 1
+            test_results.append(
+                Result(f"{fuzzer} oracle", Result.Status.FAIL)
+                .set_info(
+                    f"{mismatches} result mismatches and {asymmetries} error asymmetries "
+                    "between the oracle variants, see oracle_mismatches.log"
+                )
+                .set_files([str(oracle_log)])
+            )
 
     return [oks, errors, fails, test_results]
 
@@ -518,8 +532,6 @@ def main():
     is_master = info.pr_number == 0 and info.git_branch == "master"
 
     fuzzers_path = temp_path
-    # Before the corpus download, which drops the corpora of targets that do not exist
-    add_format_fuzzer_instances(fuzzers_path)
     download_corpus(fuzzers_path)
 
     for file in os.listdir(fuzzers_path):
